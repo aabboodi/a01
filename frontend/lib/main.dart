@@ -1,0 +1,33 @@
+import 'package:flutter/material.dart';
+import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'المعهد الأول',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        // Basic RTL support for Arabic text
+        scaffoldBackgroundColor: Colors.grey[50],
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+        ),
+        textTheme: const TextTheme(
+          bodyMedium: TextStyle(fontFamily: 'Roboto'), // Example font
+        ),
+      ),
+      // Set the initial route to the login screen
+      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
