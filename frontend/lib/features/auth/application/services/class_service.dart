@@ -5,7 +5,8 @@ class ClassService {
   final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
 
   Future<List<dynamic>> getAllClasses() async {
-    final url = Uri.parse('$_baseUrl/classes');
+    // ... (getAllClasses implementation remains the same)
+        final url = Uri.parse('$_baseUrl/classes');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -18,8 +19,23 @@ class ClassService {
     }
   }
 
+  Future<List<dynamic>> getClassesByTeacher(String teacherId) async {
+    final url = Uri.parse('$_baseUrl/classes?teacherId=$teacherId');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load classes for teacher');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
+
   Future<Map<String, dynamic>> createClass(String className, String teacherId) async {
-    final url = Uri.parse('$_baseUrl/classes');
+    // ... (createClass implementation remains the same)
+        final url = Uri.parse('$_baseUrl/classes');
     try {
       final response = await http.post(
         url,
@@ -40,6 +56,4 @@ class ClassService {
       throw Exception('A network error occurred: ${e.toString()}');
     }
   }
-
-  // NOTE: enrollStudents and getStudentsByClass will be added later when needed.
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, ParseUUIDPipe, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { EnrollStudentsDto } from './dto/enroll-students.dto';
@@ -13,12 +13,12 @@ export class ClassesController {
   }
 
   @Get()
-  findAll() {
-    return this.classesService.findAll();
+  findAll(@Query('teacherId') teacherId?: string) {
+    return this.classesService.findAll(teacherId);
   }
 
   @Post(':id/enroll')
-  @HttpCode(HttpStatus.NO_CONTENT) // Return 204 No Content on success
+  @HttpCode(HttpStatus.NO_CONTENT)
   enrollStudents(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() enrollStudentsDto: EnrollStudentsDto,

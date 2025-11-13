@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/auth_service.dart';
 import 'package:frontend/features/auth/presentation/screens/admin_dashboard.dart';
+import 'package:frontend/features/auth/presentation/screens/teacher_dashboard.dart';
+import 'package:frontend/features/auth/presentation/screens/student_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,9 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final userData = await _authService.login(loginCode);
-      // Navigate based on user role
       if (mounted) {
-        _navigateToDashboard(userData['role']);
+        _navigateToDashboard(userData['role'], userData);
       }
     } catch (e) {
       _showError(e.toString());
@@ -38,19 +39,19 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateToDashboard(String role) {
+  void _navigateToDashboard(String role, Map<String, dynamic> userData) {
     Widget page;
     switch (role) {
       case 'admin':
         page = const AdminDashboard();
         break;
-      // Add cases for 'teacher' and 'student' later
-      // case 'teacher':
-      //   page = const TeacherDashboard();
-      //   break;
-      // case 'student':
-      //   page = const StudentDashboard();
-      //   break;
+      case 'teacher':
+        // Pass user data to the teacher dashboard
+        page = TeacherDashboard(userData: userData);
+        break;
+      case 'student':
+        page = const StudentDashboard();
+        break;
       default:
         _showError('دور المستخدم غير معروف: $role');
         return;
@@ -78,7 +79,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // ... (build method remains the same)
+        return Scaffold(
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
