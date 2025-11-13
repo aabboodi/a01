@@ -27,16 +27,24 @@ export class UsersService {
     return this.userRepository.find();
   }
 
-  /**
-   * Finds a single user by their login code.
-   * @param loginCode - The login code to search for.
-   * @returns The user entity if found.
-   * @throws NotFoundException if no user is found with the given code.
-   */
   async findOneByLoginCode(loginCode: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { login_code: loginCode } });
     if (!user) {
       throw new NotFoundException(`User with login code '${loginCode}' not found.`);
+    }
+    return user;
+  }
+
+  /**
+   * Finds a single user by their ID.
+   * @param userId - The UUID of the user to search for.
+   * @returns The user entity if found.
+   * @throws NotFoundException if no user is found with the given ID.
+   */
+  async findOneById(userId: string): Promise<User> {
+    const user = await this.userRepository.findOneBy({ user_id: userId });
+    if (!user) {
+      throw new NotFoundException(`User with ID '${userId}' not found.`);
     }
     return user;
   }
