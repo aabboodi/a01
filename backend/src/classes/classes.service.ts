@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindManyOptions } from 'typeorm';
 import { Class } from './entities/class.entity';
 import { Enrollment } from './entities/enrollment.entity';
 import { CreateClassDto } from './dto/create-class.dto';
@@ -20,8 +20,7 @@ export class ClassesService {
   async create(createClassDto: CreateClassDto): Promise<Class> {
     const { class_name, teacher_id } = createClassDto;
 
-    // First, verify the teacher exists and has the 'teacher' role
-    const teacher = await this.usersService.findOneById(teacher_id); // Assumes findOneById exists
+    const teacher = await this.usersService.findOneById(teacher_id);
     if (teacher.role !== UserRole.TEACHER) {
       throw new BadRequestException('The assigned user is not a teacher.');
     }
@@ -30,8 +29,12 @@ export class ClassesService {
     return this.classRepository.save(newClass);
   }
 
-  async findAll(): Promise<Class[]> {
-    return this.classRepository.find({ relations: ['teacher'] });
+  async findAll(teacherId?: string): Promise<Class[]> {
+    const options: FindManyOptions<Class> = { relations: ['teacher'] };
+    if (teacherId) {
+      options.where = { teacher: { user_id: teacherId } };
+    }
+    return this.classRepository.find(options);
   }
 
   async enrollStudents(classId: string, studentIds: string[]): Promise<void> {
@@ -41,12 +44,11 @@ export class ClassesService {
     }
 
     for (const studentId of studentIds) {
-      const student = await this.usersService.findOneById(studentId); // Assumes findOneById exists
+      const student = await this.usersService.findOneById(studentId);
       if (student.role !== UserRole.STUDENT) {
         throw new BadRequestException(`User with ID ${studentId} is not a student.`);
       }
 
-      // Avoid creating duplicate enrollments
       const existingEnrollment = await this.enrollmentRepository.findOne({
         where: { class: { class_id: classId }, student: { user_id: studentId } },
       });
