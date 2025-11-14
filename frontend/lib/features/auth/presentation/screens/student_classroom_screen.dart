@@ -14,11 +14,15 @@ class ChatMessage {
 class StudentClassroomScreen extends StatefulWidget {
   final Map<String, dynamic> classData;
   final Map<String, dynamic> userData;
+class StudentClassroomScreen extends StatefulWidget {
+  final Map<String, dynamic> classData;
+  final Map<String, dynamic> userData; // Added userData
 
   const StudentClassroomScreen({
     super.key,
     required this.classData,
     required this.userData,
+    required this.userData, // Added userData
   });
 
   @override
@@ -73,6 +77,12 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
       },
       // ... (WebRTC callbacks remain the same)
           onOfferReceived: (data) async {
+    // ... (service setup remains the same)
+        _classroomService = ClassroomService(
+      onJoinedRoom: (message) {
+        if (mounted) setState(() => _serverMessage = message);
+      },
+      onOfferReceived: (data) async {
         print("Offer received");
         await _createPeerConnection();
         await _peerConnection!.setRemoteDescription(
@@ -83,6 +93,9 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         _classroomService.sendAnswer(widget.classData['class_id'], {'sdp': answer.sdp, 'type': answer.type});
       },
       onAnswerReceived: (data) {},
+      onAnswerReceived: (data) {
+        // Students primarily receive offers, so this is less likely to be used.
+      },
       onIceCandidateReceived: (data) async {
         if (_peerConnection != null) {
           await _peerConnection!.addCandidate(
@@ -128,6 +141,9 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     });
   }
 
+    super.dispose();
+  }
+
   Future<void> _createPeerConnection() async {
     _peerConnection = await createPeerConnection(_iceServers, {});
 
@@ -161,6 +177,7 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
           // Video View
           Expanded(
             flex: 3,
+          Expanded(
             child: Container(
               color: Colors.black,
               child: RTCVideoView(_remoteRenderer, mirror: true),
@@ -209,6 +226,11 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
             ),
           ),
           // Controls
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            color: Colors.blueGrey[100],
+            child: Text('حالة الخادم: $_serverMessage'),
+          ),
           Container(
             padding: const EdgeInsets.all(16.0),
             color: Colors.grey[200],

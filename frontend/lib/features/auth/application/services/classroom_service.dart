@@ -39,6 +39,8 @@ class ClassroomService {
     _socket.on('request-to-speak', (data) => onRequestToSpeakReceived(data)); // Listen for requests
 
     // Listen for WebRTC signaling events
+
+    // Listen for WebRTC signaling events from other clients
     _socket.on('webrtc-offer', (data) => onOfferReceived(data));
     _socket.on('webrtc-answer', (data) => onAnswerReceived(data));
     _socket.on('webrtc-ice-candidate', (data) => onIceCandidateReceived(data));
@@ -51,6 +53,7 @@ class ClassroomService {
   void sendChatMessage(String classId, String message) {
     _socket.emit('chat-message', {'classId': classId, 'message': message});
   }
+  // --- Emitter Functions to send data to the server ---
 
   void sendOffer(String classId, dynamic offer) {
     _socket.emit('webrtc-offer', {'classId': classId, 'offer': offer});
