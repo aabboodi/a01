@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package.flutter/material.dart';
 import 'package:frontend/features/auth/application/services/user_service.dart';
 
 class ManageTeachersScreen extends StatefulWidget {
@@ -20,16 +20,32 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
 
   void _loadTeachers() {
     setState(() {
-      _teachersFuture = _userService.getAllUsers().then(
-        (users) => users.where((user) => user['role'] == 'teacher').toList()
-      );
+      _teachersFuture = _userService.getUsersByRole('teacher');
     });
+  }
+
+  Future<void> _deleteTeacher(String userId) async {
+    try {
+      await _userService.deleteUser(userId);
+      _loadTeachers(); // Refresh the list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _showAddTeacherDialog() async {
     final formKey = GlobalKey<FormState>();
     final fullNameController = TextEditingController();
     final loginCodeController = TextEditingController();
+    // Simplified CreateUserDto for the dialog
+    final Map<String, dynamic> newUser = {
+      'full_name': '',
+      'login_code': '',
+      'role': 'teacher'
+    };
+
 
     return showDialog<void>(
       context: context,
@@ -45,11 +61,13 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
                   controller: fullNameController,
                   decoration: const InputDecoration(labelText: 'الاسم الكامل'),
                   validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
+                  onSaved: (value) => newUser['full_name'] = value!,
                 ),
                 TextFormField(
                   controller: loginCodeController,
                   decoration: const InputDecoration(labelText: 'كود الدخول'),
                   validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
+                  onSaved: (value) => newUser['login_code'] = value!,
                 ),
               ],
             ),
@@ -63,11 +81,12 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
               child: const Text('إضافة'),
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
+                  formKey.currentState!.save();
                   try {
                     await _userService.createUser(
-                      fullNameController.text,
-                      loginCodeController.text,
-                      'teacher',
+                      newUser['full_name'],
+                      newUser['login_code'],
+                      newUser['role'],
                     );
                     Navigator.of(context).pop();
                     _loadTeachers(); // Refresh the list
@@ -110,6 +129,10 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
               return ListTile(
                 title: Text(teacher['full_name']),
                 subtitle: Text('الكود: ${teacher['login_code']}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _deleteTeacher(teacher['user_id']),
+                ),
               );
             },
           );

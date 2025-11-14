@@ -26,15 +26,24 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
     });
   }
 
+  Future<void> _deleteClass(String classId) async {
+    try {
+      await _classService.deleteClass(classId);
+      _loadClasses(); // Refresh list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _showAddClassDialog() async {
     final formKey = GlobalKey<FormState>();
     final classNameController = TextEditingController();
     String? selectedTeacherId;
 
-    // Fetch teachers to populate the dropdown
-    final teachers = await _userService.getAllUsers().then(
-      (users) => users.where((user) => user['role'] == 'teacher').toList()
-    );
+    // Use the efficient API call
+    final teachers = await _userService.getUsersByRole('teacher');
 
     return showDialog<void>(
       context: context,
@@ -80,12 +89,62 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
                       selectedTeacherId!,
                     );
                     Navigator.of(context).pop();
-                    _loadClasses(); // Refresh the list
+                    _loadClasses();
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
                     );
                   }
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showEnrollStudentsDialog(String classId) async {
+    final studentCodesController = TextEditingController();
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('تسجيل طلاب جدد'),
+          content: TextField(
+            controller: studentCodesController,
+            decoration: const InputDecoration(
+              labelText: 'أدخل أكواد الطلاب (مفصولة بفاصلة)',
+              hintText: 'student01,student02,...',
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('إلغاء'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              child: const Text('تسجيل'),
+              onPressed: () async {
+                final codes = studentCodesController.text.split(',').map((e) => e.trim()).toList();
+                List<String> studentIds = [];
+                try {
+                  for (String code in codes) {
+                    if (code.isNotEmpty) {
+                      final student = await _userService.findUserByLoginCode(code);
+                      studentIds.add(student['user_id']);
+                    }
+                  }
+                  await _classService.enrollStudents(classId, studentIds);
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تسجيل الطلاب بنجاح!'), backgroundColor: Colors.green),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                  );
                 }
               },
             ),
@@ -117,10 +176,27 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
             itemCount: classes.length,
             itemBuilder: (context, index) {
               final aClass = classes[index];
-              return ListTile(
-                title: Text(aClass['class_name']),
-                subtitle: Text('المدرس: ${aClass['teacher']['full_name']}'),
-                // TODO: Add onTap to navigate to a class details screen
+              return Card(
+                margin: const EdgeInsets.all(8.0),
+                child: ListTile(
+                  title: Text(aClass['class_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('المدرس: ${aClass['teacher']['full_name']}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.person_add, color: Colors.blue),
+                        onPressed: () => _showEnrollStudentsDialog(aClass['class_id']),
+                        tooltip: 'إدارة الطلاب',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteClass(aClass['class_id']),
+                        tooltip: 'حذف الصف',
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           );
