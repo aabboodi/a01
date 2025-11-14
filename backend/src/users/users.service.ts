@@ -23,7 +23,10 @@ export class UsersService {
     return this.userRepository.save(newUser);
   }
 
-  async findAll(): Promise<User[]> {
+  async findAll(role?: string): Promise<User[]> {
+    if (role) {
+      return this.userRepository.find({ where: { role } });
+    }
     return this.userRepository.find();
   }
 
@@ -47,5 +50,10 @@ export class UsersService {
       throw new NotFoundException(`User with ID '${userId}' not found.`);
     }
     return user;
+  }
+
+  async remove(userId: string): Promise<void> {
+    const user = await this.findOneById(userId); // Reuse findOneById to handle not found error
+    await this.userRepository.remove(user);
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package.flutter/material.dart';
 import 'package:frontend/features/auth/application/services/user_service.dart';
 
 class ManageStudentsScreen extends StatefulWidget {
@@ -30,10 +30,11 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
       _error = null;
     });
     try {
-      final users = await _userService.getAllUsers();
+      // Use the efficient API call
+      final students = await _userService.getUsersByRole('student');
       setState(() {
-        _allStudents = users.where((user) => user['role'] == 'student').toList();
-        _filteredStudents = _allStudents;
+        _allStudents = students;
+        _filteredStudents = students;
         _isLoading = false;
       });
     } catch (e) {
@@ -50,14 +51,26 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
       _filteredStudents = _allStudents.where((student) {
         final name = student['full_name'].toString().toLowerCase();
         final code = student['login_code'].toString().toLowerCase();
-        return name.contains(query) || code.contains(query);
+        final phone = student['phone_number']?.toString().toLowerCase() ?? '';
+        return name.contains(query) || code.contains(query) || phone.contains(query);
       }).toList();
     });
   }
 
+  Future<void> _deleteStudent(String userId) async {
+    try {
+      await _userService.deleteUser(userId);
+      _loadStudents(); // Refresh the list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _showAddStudentDialog() async {
-    // This dialog logic is very similar to the one for teachers
-    final formKey = GlobalKey<FormState>();
+    // Dialog logic remains the same as it is already well-implemented
+        final formKey = GlobalKey<FormState>();
     final fullNameController = TextEditingController();
     final loginCodeController = TextEditingController();
 
@@ -97,10 +110,10 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                     await _userService.createUser(
                       fullNameController.text,
                       loginCodeController.text,
-                      'student', // Role is 'student'
+                      'student',
                     );
                     Navigator.of(context).pop();
-                    _loadStudents(); // Refresh the list
+                    _loadStudents();
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
@@ -134,14 +147,14 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
             child: TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'بحث بالاسم أو الكود',
+                labelText: 'بحث بالاسم, الكود, أو الهاتف',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
             ),
           ),
           Expanded(
-            child: _buildStudentList(),
+            child: _buildStudentTable(),
           ),
         ],
       ),
@@ -153,7 +166,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
     );
   }
 
-  Widget _buildStudentList() {
+  Widget _buildStudentTable() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -164,18 +177,26 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
       return const Center(child: Text('لا يوجد طلاب لعرضهم.'));
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadStudents,
-      child: ListView.builder(
-        itemCount: _filteredStudents.length,
-        itemBuilder: (context, index) {
-          final student = _filteredStudents[index];
-          // TODO: Implement color coding for new students when enrollment data is available.
-          return ListTile(
-            title: Text(student['full_name']),
-            subtitle: Text('الكود: ${student['login_code']}'),
-          );
-        },
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('الاسم الثلاثي')),
+          DataColumn(label: Text('الكود')),
+          DataColumn(label: Text('رقم الهاتف')),
+          DataColumn(label: Text('إجراء')),
+        ],
+        rows: _filteredStudents.map((student) {
+          return DataRow(cells: [
+            DataCell(Text(student['full_name'])),
+            DataCell(Text(student['login_code'])),
+            DataCell(Text(student['phone_number'] ?? 'N/A')),
+            DataCell(IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _deleteStudent(student['user_id']),
+            )),
+          ]);
+        }).toList(),
       ),
     );
   }

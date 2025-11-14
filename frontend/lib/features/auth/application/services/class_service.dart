@@ -56,4 +56,33 @@ class ClassService {
       throw Exception('A network error occurred: ${e.toString()}');
     }
   }
+
+  Future<void> enrollStudents(String classId, List<String> studentIds) async {
+    final url = Uri.parse('$_baseUrl/classes/$classId/enroll');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'student_ids': studentIds}),
+      );
+
+      if (response.statusCode != 204) {
+        throw Exception('Failed to enroll students.');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
+
+  Future<void> deleteClass(String classId) async {
+    final url = Uri.parse('$_baseUrl/classes/$classId');
+    try {
+      final response = await http.delete(url);
+      if (response.statusCode != 204) {
+        throw Exception('Failed to delete class.');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
 }
