@@ -20,6 +20,12 @@ dependencies:
   # For WebRTC functionality (video, audio)
   flutter_webrtc: ^0.9.48
 
+  # For simple key-value storage
+  shared_preferences: ^2.2.3
+
+  # For decoding JWTs to extract payload
+  jwt_decoder: ^2.0.1
+
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
