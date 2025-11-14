@@ -35,6 +35,53 @@ export class ClassroomGateway {
     client.emit('joined-room', `Successfully joined room ${classId}`);
   }
 
-  // We will add more handlers here for WebRTC signaling later.
-  // For example: @SubscribeMessage('offer'), @SubscribeMessage('answer'), etc.
+  @SubscribeMessage('chat-message')
+  handleChatMessage(
+    @MessageBody() data: { classId: string; message: string },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the message to all other clients in the same room
+    client.to(data.classId).emit('chat-message', {
+      message: data.message,
+      senderId: client.id, // Identify the sender
+    });
+  }
+
+  // --- WebRTC Signaling Handlers ---
+
+  @SubscribeMessage('webrtc-offer')
+  handleWebrtcOffer(
+    @MessageBody() data: { classId: string; offer: any },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the offer to all other clients in the room
+    client.to(data.classId).emit('webrtc-offer', {
+      offer: data.offer,
+      senderId: client.id,
+    });
+  }
+
+  @SubscribeMessage('webrtc-answer')
+  handleWebrtcAnswer(
+    @MessageBody() data: { classId: string; answer: any },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the answer to all other clients in the room
+    client.to(data.classId).emit('webrtc-answer', {
+      answer: data.answer,
+      senderId: client.id,
+    });
+  }
+
+  @SubscribeMessage('webrtc-ice-candidate')
+  handleWebrtcIceCandidate(
+    @MessageBody() data: { classId: string; candidate: any },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the ICE candidate to all other clients in the room
+    client.to(data.classId).emit('webrtc-ice-candidate', {
+      candidate: data.candidate,
+      senderId: client.id,
+    });
+  }
 }
