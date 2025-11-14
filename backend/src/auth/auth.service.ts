@@ -1,24 +1,32 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
-import { User } from '../users/entities/user.entity';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   /**
-   * Validates a user based on their login code.
+   * Validates a user and returns a JWT access token.
    * @param loginCode - The login code provided by the user.
-   * @returns The full user object if the login is successful.
+   * @returns An object containing the JWT access token.
    * @throws UnauthorizedException if the login code is invalid.
    */
-  async login(loginCode: string): Promise<User> {
+  async login(loginCode: string): Promise<{ access_token: string }> {
     try {
       const user = await this.usersService.findOneByLoginCode(loginCode);
-      return user;
+      const payload = {
+        userId: user.id,
+        loginCode: user.login_code,
+        role: user.role,
+      };
+      return {
+        access_token: this.jwtService.sign(payload),
+      };
     } catch (error) {
-      // Catch the NotFoundException from UsersService and throw a more appropriate
-      // UnauthorizedException for a failed login attempt.
       throw new UnauthorizedException('Invalid login code.');
     }
   }
