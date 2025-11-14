@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, ParseUUIDPipe, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, ParseUUIDPipe, HttpCode, HttpStatus, Query, Delete } from '@nestjs/common';
 import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { EnrollStudentsDto } from './dto/enroll-students.dto';
@@ -29,5 +29,11 @@ export class ClassesController {
   @Get(':id/students')
   findStudentsByClass(@Param('id', ParseUUIDPipe) id: string) {
     return this.classesService.findStudentsByClass(id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeClass(@Param('id', ParseUUIDPipe) id: string) {
+    return this.classesService.removeClass(id);
   }
 }

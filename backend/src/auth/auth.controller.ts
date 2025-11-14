@@ -12,8 +12,8 @@ export class AuthController {
    * POST /auth/login
    */
   @Post('login')
-  @HttpCode(HttpStatus.OK) // Return 200 OK on success instead of the default 201 Created
-  login(@Body() loginDto: LoginDto): Promise<User> {
+  @HttpCode(HttpStatus.OK)
+  login(@Body() loginDto: LoginDto): Promise<{ access_token: string }> {
     return this.authService.login(loginDto.login_code);
   }
 }

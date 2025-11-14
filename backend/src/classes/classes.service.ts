@@ -67,4 +67,17 @@ export class ClassesService {
     });
     return enrollments.map(e => e.student);
   }
+
+  async removeClass(classId: string): Promise<void> {
+    const classEntity = await this.classRepository.findOneBy({ class_id: classId });
+    if (!classEntity) {
+      throw new NotFoundException(`Class with ID ${classId} not found.`);
+    }
+
+    // First, remove all enrollments associated with this class
+    await this.enrollmentRepository.delete({ class: { class_id: classId } });
+
+    // Then, remove the class itself
+    await this.classRepository.remove(classEntity);
+  }
 }
