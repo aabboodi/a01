@@ -40,6 +40,28 @@ class ClassroomService {
     _socket.connect();
   }
 
+  // --- Emitter Functions to send data to the server ---
+
+  void sendOffer(String classId, dynamic offer) {
+    _socket.emit('webrtc-offer', {'classId': classId, 'offer': offer});
+  }
+
+  void sendAnswer(String classId, dynamic answer) {
+    _socket.emit('webrtc-answer', {'classId': classId, 'answer': answer});
+  }
+
+  void sendIceCandidate(String classId, dynamic candidate) {
+    _socket.emit('webrtc-ice-candidate', {'classId': classId, 'candidate': candidate});
+  }
+
+  void sendRequestToSpeak(String classId, String studentId, String studentName) {
+    _socket.emit('request-to-speak', {
+      'classId': classId,
+      'studentId': studentId,
+      'studentName': studentName,
+    });
+  }
+
   void dispose() {
     _socket.dispose();
   }
