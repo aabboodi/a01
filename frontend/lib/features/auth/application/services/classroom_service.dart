@@ -8,12 +8,16 @@ class ClassroomService {
   final Function(dynamic) onOfferReceived;
   final Function(dynamic) onAnswerReceived;
   final Function(dynamic) onIceCandidateReceived;
+  final Function(dynamic) onChatMessageReceived;
+  final Function(dynamic) onRequestToSpeakReceived; // New callback
 
   ClassroomService({
     required this.onJoinedRoom,
     required this.onOfferReceived,
     required this.onAnswerReceived,
     required this.onIceCandidateReceived,
+    required this.onChatMessageReceived,
+    required this.onRequestToSpeakReceived, // New callback
   });
 
   void connectAndJoin(String classId) {
@@ -31,6 +35,10 @@ class ClassroomService {
 
     // --- Register Event Listeners ---
     _socket.on('joined-room', (data) => onJoinedRoom(data));
+    _socket.on('chat-message', (data) => onChatMessageReceived(data));
+    _socket.on('request-to-speak', (data) => onRequestToSpeakReceived(data)); // Listen for requests
+
+    // Listen for WebRTC signaling events
 
     // Listen for WebRTC signaling events from other clients
     _socket.on('webrtc-offer', (data) => onOfferReceived(data));
@@ -40,6 +48,11 @@ class ClassroomService {
     _socket.connect();
   }
 
+  // --- Emitter Functions ---
+
+  void sendChatMessage(String classId, String message) {
+    _socket.emit('chat-message', {'classId': classId, 'message': message});
+  }
   // --- Emitter Functions to send data to the server ---
 
   void sendOffer(String classId, dynamic offer) {

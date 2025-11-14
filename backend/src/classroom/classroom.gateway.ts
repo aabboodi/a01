@@ -84,4 +84,17 @@ export class ClassroomGateway {
       senderId: client.id,
     });
   }
+
+  @SubscribeMessage('request-to-speak')
+  handleRequestToSpeak(
+    @MessageBody() data: { classId: string; studentId: string; studentName: string },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the request to other clients in the room (i.e., the teacher)
+    client.to(data.classId).emit('request-to-speak', {
+      studentId: data.studentId,
+      studentName: data.studentName,
+      socketId: client.id,
+    });
+  }
 }

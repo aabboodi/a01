@@ -2,6 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/features/auth/application/services/classroom_service.dart';
 
+// Simple class to hold message data
+class ChatMessage {
+  final String message;
+  final String senderId;
+  final bool isLocal;
+
+  ChatMessage({required this.message, required this.senderId, required this.isLocal});
+}
+
+class StudentClassroomScreen extends StatefulWidget {
+  final Map<String, dynamic> classData;
+  final Map<String, dynamic> userData;
 class StudentClassroomScreen extends StatefulWidget {
   final Map<String, dynamic> classData;
   final Map<String, dynamic> userData; // Added userData
@@ -9,6 +21,7 @@ class StudentClassroomScreen extends StatefulWidget {
   const StudentClassroomScreen({
     super.key,
     required this.classData,
+    required this.userData,
     required this.userData, // Added userData
   });
 
@@ -22,6 +35,11 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   RTCPeerConnection? _peerConnection;
   String _serverMessage = '';
   bool _requestSent = false;
+
+  // Chat state
+  final List<ChatMessage> _chatMessages = [];
+  final TextEditingController _chatController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   final Map<String, dynamic> _iceServers = {
     'iceServers': [
@@ -41,6 +59,24 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   }
 
   void _setupClassroomService() {
+    _classroomService = ClassroomService(
+      onJoinedRoom: (message) {
+        if (mounted) setState(() => _serverMessage = message);
+      },
+      onChatMessageReceived: (data) {
+        if (mounted) {
+          setState(() {
+            _chatMessages.add(ChatMessage(
+              message: data['message'],
+              senderId: data['senderId'],
+              isLocal: false,
+            ));
+          });
+          _scrollToBottom();
+        }
+      },
+      // ... (WebRTC callbacks remain the same)
+          onOfferReceived: (data) async {
     // ... (service setup remains the same)
         _classroomService = ClassroomService(
       onJoinedRoom: (message) {
@@ -56,6 +92,7 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         await _peerConnection!.setLocalDescription(answer);
         _classroomService.sendAnswer(widget.classData['class_id'], {'sdp': answer.sdp, 'type': answer.type});
       },
+      onAnswerReceived: (data) {},
       onAnswerReceived: (data) {
         // Students primarily receive offers, so this is less likely to be used.
       },
@@ -79,6 +116,31 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     _remoteRenderer.dispose();
     _peerConnection?.close();
     _classroomService.dispose();
+    _chatController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _sendMessage() {
+    final message = _chatController.text.trim();
+    if (message.isNotEmpty) {
+      _classroomService.sendChatMessage(widget.classData['class_id'], message);
+      setState(() {
+        _chatMessages.add(ChatMessage(message: message, senderId: 'me', isLocal: true));
+      });
+      _chatController.clear();
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
     super.dispose();
   }
 
@@ -112,12 +174,58 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
       ),
       body: Column(
         children: [
+          // Video View
+          Expanded(
+            flex: 3,
           Expanded(
             child: Container(
               color: Colors.black,
               child: RTCVideoView(_remoteRenderer, mirror: true),
             ),
           ),
+          // Chat View
+          Expanded(
+            flex: 2, // Give chat a bit more space on student's screen
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    itemCount: _chatMessages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _chatMessages[index];
+                      return ListTile(
+                        title: Text(msg.message),
+                        subtitle: Text(msg.isLocal ? 'أنا' : 'مدرس'),
+                        tileColor: msg.isLocal ? Colors.blue.withOpacity(0.1) : null,
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _chatController,
+                          decoration: const InputDecoration(
+                            hintText: 'اكتب رسالة...',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.send),
+                        onPressed: _sendMessage,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Controls
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
