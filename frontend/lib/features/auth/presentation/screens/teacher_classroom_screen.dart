@@ -14,8 +14,16 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   late ClassroomService _classroomService;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   MediaStream? _localStream;
+  RTCPeerConnection? _peerConnection;
   bool _isBroadcasting = false;
   String _serverMessage = '';
+
+  // WebRTC configuration
+  final Map<String, dynamic> _iceServers = {
+    'iceServers': [
+      {'urls': 'stun:stun.l.google.com:19302'},
+    ]
+  };
 
   @override
   void initState() {
@@ -24,13 +32,37 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   }
 
   Future<void> _initialize() async {
-    // Initialize the renderer
     await _localRenderer.initialize();
+    _setupClassroomService();
+  }
 
-    // Initialize and connect the classroom service
-    _classroomService = ClassroomService(onJoinedRoom: (message) {
-      if (mounted) setState(() => _serverMessage = message);
-    });
+  void _setupClassroomService() {
+    _classroomService = ClassroomService(
+      onJoinedRoom: (message) {
+        if (mounted) setState(() => _serverMessage = message);
+      },
+      onOfferReceived: (data) {
+        // Teachers primarily send offers, but this could be useful for other scenarios
+      },
+      onAnswerReceived: (data) async {
+        if (_peerConnection != null) {
+          await _peerConnection!.setRemoteDescription(
+            RTCSessionDescription(data['answer']['sdp'], data['answer']['type']),
+          );
+        }
+      },
+      onIceCandidateReceived: (data) async {
+        if (_peerConnection != null) {
+          await _peerConnection!.addCandidate(
+            RTCIceCandidate(
+              data['candidate']['candidate'],
+              data['candidate']['sdpMid'],
+              data['candidate']['sdpMLineIndex'],
+            ),
+          );
+        }
+      },
+    );
     _classroomService.connectAndJoin(widget.classData['class_id']);
   }
 
@@ -38,42 +70,80 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   void dispose() {
     _localRenderer.dispose();
     _localStream?.getTracks().forEach((track) => track.stop());
+    _peerConnection?.close();
     _classroomService.dispose();
     super.dispose();
   }
 
   Future<void> _toggleBroadcast() async {
     if (_isBroadcasting) {
-      // Stop the stream
-      _localStream?.getTracks().forEach((track) => track.stop());
-      _localRenderer.srcObject = null;
-      setState(() => _isBroadcasting = false);
+      await _stopBroadcast();
       return;
     }
+    await _startBroadcast();
+  }
 
+  Future<void> _startBroadcast() async {
     try {
-      final stream = await navigator.mediaDevices.getUserMedia({
+      _localStream = await navigator.mediaDevices.getUserMedia({
         'video': true,
         'audio': true,
       });
-
-      _localStream = stream;
       _localRenderer.srcObject = _localStream;
 
-      setState(() => _isBroadcasting = true);
+      await _createPeerConnection();
 
-      // TODO: Create a peer connection and send the stream to other participants
+      // Create and send an offer
+      RTCSessionDescription offer = await _peerConnection!.createOffer();
+      await _peerConnection!.setLocalDescription(offer);
+      _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
+
+      setState(() => _isBroadcasting = true);
     } catch (e) {
-      print('Error accessing media devices: $e');
+      print('Error starting broadcast: $e');
     }
+  }
+
+  Future<void> _stopBroadcast() async {
+    try {
+      _localStream?.getTracks().forEach((track) {
+        track.stop();
+      });
+      await _peerConnection?.close();
+      _peerConnection = null;
+      _localRenderer.srcObject = null;
+      setState(() => _isBroadcasting = false);
+    } catch (e) {
+      print('Error stopping broadcast: $e');
+    }
+  }
+
+  Future<void> _createPeerConnection() async {
+    _peerConnection = await createPeerConnection(_iceServers, {});
+
+    // Listen for ICE candidates and send them to the other peer
+    _peerConnection!.onIceCandidate = (event) {
+      if (event.candidate != null) {
+        _classroomService.sendIceCandidate(widget.classData['class_id'], {
+          'candidate': event.candidate!.candidate,
+          'sdpMid': event.candidate!.sdpMid,
+          'sdpMLineIndex': event.candidate!.sdpMLineIndex,
+        });
+      }
+    };
+
+    // Add local stream tracks to the peer connection
+    _localStream?.getTracks().forEach((track) {
+      _peerConnection?.addTrack(track, _localStream!);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // UI remains largely the same
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.classData['class_name']),
-        // ... (actions remain the same)
       ),
       body: Column(
         children: [
@@ -87,7 +157,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
                     ),
             ),
           ),
-          // A small bar to show server messages
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
@@ -104,7 +173,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
                   _isBroadcasting ? 'إيقاف البث' : 'بدء البث',
                   _toggleBroadcast,
                 ),
-                // ... (other buttons remain non-functional for now)
               ],
             ),
           ),
@@ -114,8 +182,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   }
 
   Widget _buildControlButton(IconData icon, String label, VoidCallback onPressed) {
-    // ... (buildControlButton remains the same)
-        return Column(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(icon: Icon(icon), onPressed: onPressed, iconSize: 30),
