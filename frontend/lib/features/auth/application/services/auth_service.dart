@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthService {
-  // Use 10.0.2.2 for the Android emulator to connect to the host's localhost
   final String _baseUrl = 'http://10.0.2.2:3000';
 
   Future<Map<String, dynamic>> login(String loginCode) async {
@@ -16,15 +17,21 @@ class AuthService {
       );
 
       if (response.statusCode == 200) {
-        // Successfully logged in
-        return json.decode(response.body);
+        final body = json.decode(response.body);
+        final String accessToken = body['access_token'];
+
+        // Store the token securely
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('access_token', accessToken);
+
+        // Decode the token to get user data (role, etc.)
+        Map<String, dynamic> decodedToken = JwtDecoder.decode(accessToken);
+        return decodedToken;
       } else {
-        // Handle errors like 401 Unauthorized, 404, etc.
         final errorBody = json.decode(response.body);
         throw Exception(errorBody['message'] ?? 'Failed to login.');
       }
     } catch (e) {
-      // Handle network errors or other exceptions
       throw Exception('A network error occurred: ${e.toString()}');
     }
   }

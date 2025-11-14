@@ -4,9 +4,8 @@ import 'package:http/http.dart' as http;
 class UserService {
   final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
 
-  // Fetches a list of all users from the backend
-  Future<List<dynamic>> getAllUsers() async {
-    final url = Uri.parse('$_baseUrl/users');
+  Future<List<dynamic>> getUsersByRole(String role) async {
+    final url = Uri.parse('$_baseUrl/users?role=$role');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -19,7 +18,6 @@ class UserService {
     }
   }
 
-  // Creates a new user
   Future<Map<String, dynamic>> createUser(String fullName, String loginCode, String role) async {
     final url = Uri.parse('$_baseUrl/users');
     try {
@@ -38,6 +36,32 @@ class UserService {
       } else {
         final errorBody = json.decode(response.body);
         throw Exception(errorBody['message'] ?? 'Failed to create user.');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
+
+  Future<void> deleteUser(String userId) async {
+    final url = Uri.parse('$_baseUrl/users/$userId');
+    try {
+      final response = await http.delete(url);
+      if (response.statusCode != 204) {
+        throw Exception('Failed to delete user.');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> findUserByLoginCode(String loginCode) async {
+    final url = Uri.parse('$_baseUrl/users/by-code/$loginCode');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('User not found.');
       }
     } catch (e) {
       throw Exception('A network error occurred: ${e.toString()}');
