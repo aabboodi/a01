@@ -53,4 +53,18 @@ class RecordingService {
       throw Exception('Failed to upload recording.');
     }
   }
+
+  Future<List<dynamic>> getRecordingsForClass(String classId) async {
+    final token = await _getAccessToken();
+    final response = await http.get(
+      Uri.parse('$_baseUrl/recordings/class/$classId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load recordings.');
+    }
+  }
 }

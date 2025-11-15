@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
 import 'package:frontend/features/auth/presentation/screens/teacher_classroom_screen.dart';
+import 'package:frontend/features/auth/presentation/screens/manage_grades_screen.dart';
+import 'package:frontend/features/auth/presentation/screens/archive_screen.dart';
 
 class TeacherDashboard extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -51,8 +53,35 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               final aClass = classes[index];
               return ListTile(
                 title: Text(aClass['class_name']),
-                subtitle: const Text('اضغط للدخول إلى الصف'),
-                onTap: () => _navigateToClassroom(aClass),
+                subtitle: const Text('اختر إجراء'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.grade),
+                      tooltip: 'إدارة العلامات',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (context) => ManageGradesScreen(classData: aClass)),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.videocam),
+                      tooltip: 'الدخول إلى الصف',
+                      onPressed: () => _navigateToClassroom(aClass),
+                    ),
+                      IconButton(
+                        icon: const Icon(Icons.archive),
+                        tooltip: 'الأرشيف',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => ArchiveScreen(classData: aClass)),
+                          );
+                        },
+                      ),
+                  ],
+                ),
               );
             },
           );

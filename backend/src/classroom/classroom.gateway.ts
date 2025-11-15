@@ -28,6 +28,7 @@ export class ClassroomGateway {
     private readonly chatService: ChatService,
     private readonly usersService: UsersService,
     private readonly classesService: ClassesService,
+    private readonly attendanceService: AttendanceService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -46,6 +47,13 @@ export class ClassroomGateway {
 
         // Notify room that user has left
         this.server.to(classId).emit('user-left', { userId });
+
+        // Record event in DB
+        const user = await this.usersService.findOneById(userId);
+        const classEntity = await this.classesService.findOne(classId);
+        if (user && classEntity) {
+          this.attendanceService.recordEvent(user, classEntity, 'left' as any);
+        }
       }
     }
   }
@@ -64,6 +72,13 @@ export class ClassroomGateway {
     }
     this.attendance.get(data.classId)!.set(data.userId, { fullName: data.fullName });
     this.clients.set(client.id, { classId: data.classId, userId: data.userId });
+
+    // Record event in DB
+    const user = await this.usersService.findOneById(data.userId);
+    const classEntity = await this.classesService.findOne(data.classId);
+    if (user && classEntity) {
+      this.attendanceService.recordEvent(user, classEntity, 'joined' as any);
+    }
 
     // Notify the room that a new user has joined
     this.server.to(data.classId).emit('user-joined', { userId: data.userId, fullName: data.fullName });

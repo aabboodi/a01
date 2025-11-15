@@ -103,12 +103,6 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
           recordingUrl: url,
         );
       }).toList();
-      final historicalMessages = history.map((msg) => ChatMessage(
-        message: msg['message'],
-        senderId: msg['user']?['user_id'] ?? 'unknown',
-        isLocal: msg['user']?['user_id'] == _userId,
-        authorName: msg['user']?['full_name'] ?? 'Unknown User',
-      )).toList();
 
       if (mounted) {
         setState(() {
@@ -138,7 +132,6 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
               authorName: isSystem ? 'System' : data['user']['full_name'],
               isSystemMessage: isSystem,
               recordingUrl: url,
-              authorName: data['user']['full_name'],
             ));
           });
           _scrollToBottom();
