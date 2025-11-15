@@ -5,6 +5,7 @@ import 'package:frontend/features/auth/application/services/chat_service.dart'; 
 import 'package.frontend/features/auth/application/services/user_service.dart';
 import 'package.frontend/features/auth/application/services/recording_service.dart';
 import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
 
@@ -69,6 +70,9 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   // Recording state
   bool _isRecording = false;
   String? _currentRecordingId;
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
 
   // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
@@ -412,6 +416,16 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     }
   }
 
+  // --- Broadcasting and Media Controls ---
+
+  Future<void> _toggleBroadcast() async {
+    if (_isBroadcasting) {
+      await _stopBroadcast();
+    } else {
+      await _startBroadcast();
+    }
+  }
+
   Future<void> _startBroadcast() async {
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
@@ -427,6 +441,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
         _isBroadcasting = true;
         _startTimer();
       });
+      setState(() => _isBroadcasting = true);
     } catch (e) {
       print('Error starting broadcast: $e');
     }
@@ -456,6 +471,13 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     if (_isWhiteboardActive) {
       setState(() => _isWhiteboardActive = false);
     }
+
+    await _switchMediaStream(screenSharing: !_isScreenSharing);
+  }
+
+  void _toggleWhiteboard() {
+    if (!_isBroadcasting) return;
+
 
     await _switchMediaStream(screenSharing: !_isScreenSharing);
   }
