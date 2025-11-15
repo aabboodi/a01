@@ -169,6 +169,37 @@ ConnectionState _connectionState = ConnectionState.none;
           });
         }
       },
+      onRequestToSpeakReceived: (data) {
+        // Student sends, doesn't receive this
+      },
+      onPermissionToSpeakReceived: (data) {
+        print("Permission to speak received!");
+        _startAudioBroadcast(data['teacherSocketId']);
+      },
+      // New listener for audio mode changes
+      onAudioModeChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isFreeMicMode = data['isFreeMicMode'];
+            // If mic becomes restricted, turn off the student's mic
+            if (!_isFreeMicMode && _isMicActive) {
+              _toggleMic();
+            }
+          });
+        }
+      },
+      onSessionStateChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isPaused = data['isPaused'];
+          });
+        }
+      },
+    );
+    _classroomService.connectAndJoin(
+      widget.classData['class_id'],
+      widget.userData['user_id'],
+      widget.userData['full_name'],
     );
     _classroomService.connectAndJoin(
       widget.classData['class_id'],

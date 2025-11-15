@@ -41,7 +41,7 @@ export class ClassroomGateway {
     console.log(`Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
     const clientInfo = this.clients.get(client.id);
     if (clientInfo) {
