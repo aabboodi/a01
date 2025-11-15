@@ -33,9 +33,14 @@ export class RecordingsService {
     return this.recordingRepository.save(recording);
   }
 
-  async findForClass(classId: string): Promise<SessionRecording[]> {
+  /**
+   * Finds all recordings associated with a specific class.
+   * This is used by the admin to review class archives.
+   */
+  async getRecordingsForClass(classId: string): Promise<SessionRecording[]> {
     return this.recordingRepository.find({
       where: { class: { class_id: classId } },
+      relations: ['class'], // Ensure class relation is loaded if needed elsewhere
       order: { start_time: 'DESC' },
     });
   }

@@ -1,20 +1,17 @@
-import { Controller, Get, Post, Body, Param, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { GradesService } from './grades.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UpsertGradeDto } from './dto/upsert-grade.dto';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('grades')
 export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
 
   @Get('class/:classId')
-  getGradesForClass(@Param('classId') classId: string) {
+  @Roles('admin') // Only admin can access this
+  async getGradesForClass(@Param('classId') classId: string) {
     return this.gradesService.getGradesForClass(classId);
-  }
-
-  @Post()
-  upsertGrade(@Body(new ValidationPipe()) upsertGradeDto: UpsertGradeDto) {
-    return this.gradesService.upsertGrade(upsertGradeDto);
   }
 }

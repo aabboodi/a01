@@ -9,7 +9,6 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
-import { AttendanceService } from '../attendance/attendance.service';
 
 @WebSocketGateway({
   cors: {
@@ -60,10 +59,10 @@ export class ClassroomGateway {
   }
 
   @SubscribeMessage('join-room')
-  async handleJoinRoom(
+  handleJoinRoom(
     @MessageBody() data: { classId: string; userId: string; fullName: string },
     @ConnectedSocket() client: Socket,
-  ): Promise<void {
+  ): void {
     console.log(`Client ${client.id} (${data.fullName}) is joining room ${data.classId}`);
     client.join(data.classId);
 

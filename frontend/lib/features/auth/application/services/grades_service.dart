@@ -23,22 +23,4 @@ class GradesService {
       throw Exception('Failed to load grades.');
     }
   }
-
-  Future<Map<String, dynamic>> upsertGrade(Map<String, dynamic> gradeData) async {
-    final token = await _getAccessToken();
-    final response = await http.post(
-      Uri.parse('$_baseUrl/grades'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(gradeData),
-    );
-
-    if (response.statusCode == 201) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to save grade.');
-    }
-  }
 }
