@@ -8,6 +8,12 @@ import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widg
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
 import 'package:url_launcher/url_launcher.dart';
+import 'package.frontend/features/auth/application/services/user_service.dart';
+import 'package.frontend/features/auth/application/services/recording_service.dart';
+import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
+import 'package:shared_preferences/shared_preferences.dart'; // To get token
 
 // Data models for chat and speak requests
 class ChatMessage {
@@ -71,11 +77,20 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   final UserService _apiUserService = UserService();
   final RecordingService _recordingService = RecordingService();
 
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
+  final UserService _apiUserService = UserService();
+  final RecordingService _recordingService = RecordingService();
+
   // Recording state
   bool _isRecording = false;
   String? _currentRecordingId;
   MediaRecorder? _mediaRecorder;
   String? _recordedFilePath;
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
 
   // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
@@ -133,6 +148,12 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           recordingUrl: url,
         );
       }).toList();
+      final historicalMessages = history.map((msg) => ChatMessage(
+        message: msg['message'],
+        senderId: msg['user']?['user_id'] ?? 'unknown',
+        isLocal: msg['user']?['user_id'] == _userId,
+        authorName: msg['user']?['full_name'] ?? 'Unknown User',
+      )).toList();
 
       if (mounted) {
         setState(() {
@@ -162,6 +183,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
               authorName: isSystem ? 'System' : data['user']['full_name'],
               isSystemMessage: isSystem,
               recordingUrl: url,
+              authorName: data['user']['full_name'],
             ));
           });
           _scrollToBottom();
@@ -366,6 +388,13 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           // Upload the file
           await _recordingService.uploadRecording(_currentRecordingId!, path);
 
+      if (_currentRecordingId != null) {
+        try {
+          await _recordingService.stopRecording(_currentRecordingId!);
+          setState(() {
+            _isRecording = false;
+            _currentRecordingId = null;
+          });
         } catch (e) {
           print("Failed to stop recording: $e");
         }
@@ -431,6 +460,115 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     );
   }
 
+    }
+  }
+
+  // --- Data Fetching ---
+
+  Future<void> _fetchAllStudents() async {
+    try {
+      // Assuming you have a method in your service to get students by class.
+      // This might need to be created.
+      final students = await _apiUserService.getUsersByClass(widget.classData['class_id']);
+      if (mounted) {
+        setState(() {
+          _allStudents = students;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch students for class: $e");
+    }
+  }
+
+  // --- UI Actions ---
+
+  void _showAttendance() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ListView.builder(
+          itemCount: _allStudents.length,
+          itemBuilder: (context, index) {
+            final student = _allStudents[index];
+            final isPresent = _presentStudentIds.contains(student['user_id']);
+            return ListTile(
+              title: Text(student['full_name']),
+              trailing: Icon(
+                Icons.circle,
+                color: isPresent ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+      try {
+        final recording = await _recordingService.startRecording(widget.classData['class_id']);
+        setState(() {
+          _isRecording = true;
+          _currentRecordingId = recording['recording_id'];
+        });
+      } catch (e) {
+        print("Failed to start recording: $e");
+      }
+    }
+  }
+
+  // --- Data Fetching ---
+
+  Future<void> _fetchAllStudents() async {
+    try {
+      // Assuming you have a method in your service to get students by class.
+      // This might need to be created.
+      final students = await _apiUserService.getUsersByClass(widget.classData['class_id']);
+      if (mounted) {
+        setState(() {
+          _allStudents = students;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch students for class: $e");
+    }
+  }
+
+  // --- UI Actions ---
+
+  void _showAttendance() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ListView.builder(
+          itemCount: _allStudents.length,
+          itemBuilder: (context, index) {
+            final student = _allStudents[index];
+            final isPresent = _presentStudentIds.contains(student['user_id']);
+            return ListTile(
+              title: Text(student['full_name']),
+              trailing: Icon(
+                Icons.circle,
+                color: isPresent ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- Broadcasting and Media Controls ---
+
+  Future<void> _toggleBroadcast() async {
+    if (_isBroadcasting) {
+      await _stopBroadcast();
+    } else {
+      await _startBroadcast();
+    }
+  }
+
   // --- Broadcasting and Media Controls ---
 
   Future<void> _toggleBroadcast() async {
@@ -485,6 +623,22 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     if (_isWhiteboardActive) {
       setState(() => _isWhiteboardActive = false);
     }
+
+    await _switchMediaStream(screenSharing: !_isScreenSharing);
+  }
+
+
+    // Turn off whiteboard if active, as they conflict for screen space
+    if (_isWhiteboardActive) {
+      setState(() => _isWhiteboardActive = false);
+    }
+
+    await _switchMediaStream(screenSharing: !_isScreenSharing);
+  }
+
+  void _toggleWhiteboard() {
+    if (!_isBroadcasting) return;
+
 
     await _switchMediaStream(screenSharing: !_isScreenSharing);
   }
