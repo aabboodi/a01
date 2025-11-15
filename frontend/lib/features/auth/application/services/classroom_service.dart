@@ -1,7 +1,7 @@
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class ClassroomService {
-  late IO.Socket _socket;
+  late IO.Socket socket;
 
   // Callbacks to notify the UI of various events
   final Function(String) onJoinedRoom;
@@ -9,7 +9,8 @@ class ClassroomService {
   final Function(dynamic) onAnswerReceived;
   final Function(dynamic) onIceCandidateReceived;
   final Function(dynamic) onChatMessageReceived;
-  final Function(dynamic) onRequestToSpeakReceived; // New callback
+  final Function(dynamic) onRequestToSpeakReceived;
+  final Function(dynamic) onPermissionToSpeakReceived; // For student
 
   ClassroomService({
     required this.onJoinedRoom,
@@ -17,65 +18,70 @@ class ClassroomService {
     required this.onAnswerReceived,
     required this.onIceCandidateReceived,
     required this.onChatMessageReceived,
-    required this.onRequestToSpeakReceived, // New callback
+    required this.onRequestToSpeakReceived,
+    required this.onPermissionToSpeakReceived, // For student
   });
 
   void connectAndJoin(String classId) {
-    _socket = IO.io('http://10.0.2.2:3000', <String, dynamic>{
+    socket = IO.io('http://10.0.2.2:3000', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });
 
-    _socket.onConnect((_) {
+    socket.onConnect((_) {
       print('Connected to signaling server');
-      _socket.emit('join-room', classId);
+      socket.emit('join-room', classId);
     });
 
-    _socket.onDisconnect((_) => print('Disconnected from signaling server'));
+    socket.onDisconnect((_) => print('Disconnected from signaling server'));
 
     // --- Register Event Listeners ---
-    _socket.on('joined-room', (data) => onJoinedRoom(data));
-    _socket.on('chat-message', (data) => onChatMessageReceived(data));
-    _socket.on('request-to-speak', (data) => onRequestToSpeakReceived(data)); // Listen for requests
+    socket.on('joined-room', (data) => onJoinedRoom(data));
+    socket.on('chat-message', (data) => onChatMessageReceived(data));
+    socket.on('request-to-speak', (data) => onRequestToSpeakReceived(data)); // Listen for requests
 
     // Listen for WebRTC signaling events
 
     // Listen for WebRTC signaling events from other clients
-    _socket.on('webrtc-offer', (data) => onOfferReceived(data));
-    _socket.on('webrtc-answer', (data) => onAnswerReceived(data));
-    _socket.on('webrtc-ice-candidate', (data) => onIceCandidateReceived(data));
+    socket.on('webrtc-offer', (data) => onOfferReceived(data));
+    socket.on('webrtc-answer', (data) => onAnswerReceived(data));
+    socket.on('webrtc-ice-candidate', (data) => onIceCandidateReceived(data));
+    socket.on('permission-to-speak', (data) => onPermissionToSpeakReceived(data));
 
-    _socket.connect();
+    socket.connect();
   }
 
   // --- Emitter Functions ---
 
-  void sendChatMessage(String classId, String message) {
-    _socket.emit('chat-message', {'classId': classId, 'message': message});
-  }
-  // --- Emitter Functions to send data to the server ---
-
-  void sendOffer(String classId, dynamic offer) {
-    _socket.emit('webrtc-offer', {'classId': classId, 'offer': offer});
+  void sendChatMessage(String classId, String message, {required String userId}) {
+    socket.emit('chat-message', {'classId': classId, 'message': message, 'userId': userId});
   }
 
-  void sendAnswer(String classId, dynamic answer) {
-    _socket.emit('webrtc-answer', {'classId': classId, 'answer': answer});
+  void sendOffer(String classId, dynamic offer, {String? targetId}) {
+    socket.emit('webrtc-offer', {'classId': classId, 'offer': offer, 'targetId': targetId});
   }
 
-  void sendIceCandidate(String classId, dynamic candidate) {
-    _socket.emit('webrtc-ice-candidate', {'classId': classId, 'candidate': candidate});
+  void sendAnswer(String classId, dynamic answer, {required String targetId}) {
+    socket.emit('webrtc-answer', {'classId': classId, 'answer': answer, 'targetId': targetId});
+  }
+
+  void sendIceCandidate(String classId, dynamic candidate, {String? targetId}) {
+    socket.emit('webrtc-ice-candidate', {'classId': classId, 'candidate': candidate, 'targetId': targetId});
   }
 
   void sendRequestToSpeak(String classId, String studentId, String studentName) {
-    _socket.emit('request-to-speak', {
+    socket.emit('request-to-speak', {
       'classId': classId,
       'studentId': studentId,
       'studentName': studentName,
     });
   }
 
+  void allowToSpeak(String studentSocketId) {
+    socket.emit('allow-to-speak', {'studentSocketId': studentSocketId});
+  }
+
   void dispose() {
-    _socket.dispose();
+    socket.dispose();
   }
 }
