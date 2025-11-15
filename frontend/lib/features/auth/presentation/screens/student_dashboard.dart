@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
 import 'package:frontend/features/auth/presentation/screens/student_classroom_screen.dart';
+import 'package:frontend/features/auth/application/services/permission_service.dart';
 
 class StudentDashboard extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -13,23 +14,33 @@ class StudentDashboard extends StatefulWidget {
 
 class _StudentDashboardState extends State<StudentDashboard> {
   final ClassService _classService = ClassService();
+  final PermissionService _permissionService = PermissionService();
   Future<List<dynamic>>? _classesFuture;
 
   @override
   void initState() {
     super.initState();
-    _classesFuture = _classService.getAllClasses();
+    _classesFuture = _classService.getClassesForStudent(widget.userData['user_id']);
   }
 
-  void _navigateToClassroom(dynamic aClass) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => StudentClassroomScreen(
-          classData: aClass,
-          userData: widget.userData, // Pass user data
-        ),
-      ),
-    );
+  Future<void> _navigateToClassroom(dynamic aClass) async {
+    final permissionsGranted = await _permissionService.requestClassroomPermissions();
+    if (mounted) {
+      if (permissionsGranted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => StudentClassroomScreen(
+              classData: aClass['class'],
+              userData: widget.userData,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera and microphone permissions are required to enter the classroom.')),
+        );
+      }
+    }
   }
 
   @override
@@ -51,13 +62,54 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
           final classes = snapshot.data!;
           return ListView.builder(
+            padding: const EdgeInsets.all(8.0),
             itemCount: classes.length,
             itemBuilder: (context, index) {
               final aClass = classes[index];
-              return ListTile(
-                title: Text(aClass['class_name']),
-                subtitle: const Text('اضغط للدخول إلى الصف'),
-                onTap: () => _navigateToClassroom(aClass),
+              final className = aClass['class']?['class_name'] ?? 'اسم الصف غير متاح';
+
+              return Card(
+                elevation: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: InkWell(
+                  onTap: () => _navigateToClassroom(aClass),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                className,
+                                style: Theme.of(context).textTheme.headline6?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'جاهز للدخول',
+                                style: Theme.of(context).textTheme.subtitle1?.copyWith(
+                                      color: Colors.grey[600],
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               );
             },
           );
