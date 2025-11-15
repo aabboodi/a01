@@ -8,9 +8,20 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ClassesModule } from './classes/classes.module';
 import { ClassroomModule } from './classroom/classroom.module';
+import { ChatModule } from './chat/chat.module';
+import { RecordingsModule } from './recordings/recordings.module';
+import { GradesModule } from './grades/grades.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { ReportsModule } from './reports/reports.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -30,6 +41,11 @@ import { ClassroomModule } from './classroom/classroom.module';
     UsersModule,
     ClassesModule,
     ClassroomModule,
+    ChatModule,
+    RecordingsModule,
+    GradesModule,
+    AttendanceModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

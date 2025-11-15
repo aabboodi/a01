@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
 import 'package:frontend/features/auth/application/services/user_service.dart';
+import 'package:frontend/features/auth/presentation/screens/attendance_report_screen.dart';
+import 'package:frontend/features/auth/presentation/screens/class_archive_screen.dart';
 
 class ManageClassesScreen extends StatefulWidget {
   const ManageClassesScreen({super.key});
@@ -188,6 +190,30 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
                         icon: const Icon(Icons.person_add, color: Colors.blue),
                         onPressed: () => _showEnrollStudentsDialog(aClass['class_id']),
                         tooltip: 'إدارة الطلاب',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.bar_chart, color: Colors.orange),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => AttendanceReportScreen(classData: aClass),
+                            ),
+                          );
+                        },
+                        tooltip: 'تقرير الحضور',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.archive, color: Colors.green),
+                        onPressed: () {
+                           Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ClassArchiveScreen(classData: aClass),
+                            ),
+                          );
+                        },
+                        tooltip: 'أرشيف الصف',
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),

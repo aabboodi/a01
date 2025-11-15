@@ -17,6 +17,11 @@ export class ClassesController {
     return this.classesService.findAll(teacherId);
   }
 
+  @Get(':id/students')
+  findStudentsByClass(@Param('id') id: string) {
+    return this.classesService.findStudentsByClass(id);
+  }
+
   @Post(':id/enroll')
   @HttpCode(HttpStatus.NO_CONTENT)
   enrollStudents(

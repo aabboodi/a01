@@ -37,6 +37,17 @@ export class ClassesService {
     return this.classRepository.find(options);
   }
 
+  async findOne(classId: string): Promise<Class> {
+    const classEntity = await this.classRepository.findOne({
+      where: { class_id: classId },
+      relations: ['teacher'],
+    });
+    if (!classEntity) {
+      throw new NotFoundException(`Class with ID ${classId} not found.`);
+    }
+    return classEntity;
+  }
+
   async enrollStudents(classId: string, studentIds: string[]): Promise<void> {
     const classEntity = await this.classRepository.findOneBy({ class_id: classId });
     if (!classEntity) {
