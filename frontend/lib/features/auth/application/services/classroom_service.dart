@@ -11,6 +11,9 @@ class ClassroomService {
   final Function(dynamic) onChatMessageReceived;
   final Function(dynamic) onRequestToSpeakReceived;
   final Function(dynamic) onPermissionToSpeakReceived; // For student
+  final Function(dynamic) onUserJoined;
+  final Function(dynamic) onUserLeft;
+  final Function(dynamic) onCurrentAttendanceReceived;
 
   ClassroomService({
     required this.onJoinedRoom,
@@ -19,6 +22,13 @@ class ClassroomService {
     required this.onIceCandidateReceived,
     required this.onChatMessageReceived,
     required this.onRequestToSpeakReceived,
+    required this.onPermissionToSpeakReceived,
+    required this.onUserJoined,
+    required this.onUserLeft,
+    required this.onCurrentAttendanceReceived,
+  });
+
+  void connectAndJoin(String classId, String userId, String fullName) {
     required this.onPermissionToSpeakReceived, // For student
   });
 
@@ -30,6 +40,11 @@ class ClassroomService {
 
     socket.onConnect((_) {
       print('Connected to signaling server');
+      socket.emit('join-room', {
+        'classId': classId,
+        'userId': userId,
+        'fullName': fullName,
+      });
       socket.emit('join-room', classId);
     });
 
@@ -47,6 +62,9 @@ class ClassroomService {
     socket.on('webrtc-answer', (data) => onAnswerReceived(data));
     socket.on('webrtc-ice-candidate', (data) => onIceCandidateReceived(data));
     socket.on('permission-to-speak', (data) => onPermissionToSpeakReceived(data));
+    socket.on('user-joined', (data) => onUserJoined(data));
+    socket.on('user-left', (data) => onUserLeft(data));
+    socket.on('current-attendance', (data) => onCurrentAttendanceReceived(data));
 
     socket.connect();
   }

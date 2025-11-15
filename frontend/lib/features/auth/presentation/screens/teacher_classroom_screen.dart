@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart'; // Import chat service
+import 'package.frontend/features/auth/application/services/user_service.dart';
+import 'package.frontend/features/auth/application/services/recording_service.dart';
+import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
@@ -55,6 +58,19 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   String? _userId;
   String? _userName;
 
+  // Timer state
+  Timer? _timer;
+  Duration _elapsedTime = Duration.zero;
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
+  final UserService _apiUserService = UserService();
+  final RecordingService _recordingService = RecordingService();
+
+  // Recording state
+  bool _isRecording = false;
+  String? _currentRecordingId;
+
   // Services
   final ApiChatService _apiChatService = ApiChatService();
 
@@ -63,6 +79,10 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<SpeakRequest> _speakRequests = [];
+
+  // Attendance state
+  final Set<String> _presentStudentIds = {};
+  List<dynamic> _allStudents = []; // Will be fetched
 
   // WebRTC configuration
   final Map<String, dynamic> _iceServers = {
@@ -82,6 +102,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     await _loadUserData();
     _setupClassroomService();
     _loadChatHistory();
+    _fetchAllStudents();
   }
 
   Future<void> _loadUserData() async {
@@ -197,8 +218,34 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       onPermissionToSpeakReceived: (data) {
         // Teacher does not receive this event
       },
+      onUserJoined: (data) {
+        if (mounted) {
+          setState(() {
+            _presentStudentIds.add(data['userId']);
+          });
+        }
+      },
+      onUserLeft: (data) {
+        if (mounted) {
+          setState(() {
+            _presentStudentIds.remove(data['userId']);
+          });
+        }
+      },
+      onCurrentAttendanceReceived: (data) {
+        if (mounted) {
+          setState(() {
+            _presentStudentIds.clear();
+            _presentStudentIds.addAll(List<String>.from(data));
+          });
+        }
+      },
     );
-    _classroomService.connectAndJoin(widget.classData['class_id']);
+    _classroomService.connectAndJoin(
+      widget.classData['class_id'],
+      _userId!,
+      _userName!,
+    );
   }
 
   @override
@@ -261,6 +308,114 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     );
   }
 
+  // --- Timer Controls ---
+
+  void _startTimer() {
+    _elapsedTime = Duration.zero;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedTime = Duration(seconds: _elapsedTime.inSeconds + 1);
+        });
+      }
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$hours:$minutes:$seconds";
+  }
+
+  // --- Recording Controls ---
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      // Stop recording
+      if (_currentRecordingId != null) {
+        try {
+          await _recordingService.stopRecording(_currentRecordingId!);
+          setState(() {
+            _isRecording = false;
+            _currentRecordingId = null;
+          });
+        } catch (e) {
+          print("Failed to stop recording: $e");
+        }
+      }
+    } else {
+      // Start recording
+      try {
+        final recording = await _recordingService.startRecording(widget.classData['class_id']);
+        setState(() {
+          _isRecording = true;
+          _currentRecordingId = recording['recording_id'];
+        });
+      } catch (e) {
+        print("Failed to start recording: $e");
+      }
+    }
+  }
+
+  // --- Data Fetching ---
+
+  Future<void> _fetchAllStudents() async {
+    try {
+      // Assuming you have a method in your service to get students by class.
+      // This might need to be created.
+      final students = await _apiUserService.getUsersByClass(widget.classData['class_id']);
+      if (mounted) {
+        setState(() {
+          _allStudents = students;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch students for class: $e");
+    }
+  }
+
+  // --- UI Actions ---
+
+  void _showAttendance() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ListView.builder(
+          itemCount: _allStudents.length,
+          itemBuilder: (context, index) {
+            final student = _allStudents[index];
+            final isPresent = _presentStudentIds.contains(student['user_id']);
+            return ListTile(
+              title: Text(student['full_name']),
+              trailing: Icon(
+                Icons.circle,
+                color: isPresent ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- Broadcasting and Media Controls ---
+
+  Future<void> _toggleBroadcast() async {
+    if (_isBroadcasting) {
+      await _stopBroadcast();
+    } else {
+      await _startBroadcast();
+    }
+  }
+
   // --- Broadcasting and Media Controls ---
 
   Future<void> _toggleBroadcast() async {
@@ -282,6 +437,10 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       await _peerConnection!.setLocalDescription(offer);
       _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
 
+      setState(() {
+        _isBroadcasting = true;
+        _startTimer();
+      });
       setState(() => _isBroadcasting = true);
     } catch (e) {
       print('Error starting broadcast: $e');
@@ -298,6 +457,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
         _isBroadcasting = false;
         _isScreenSharing = false;
         _isWhiteboardActive = false;
+        _stopTimer();
       });
     } catch (e) {
       print('Error stopping broadcast: $e');
@@ -311,6 +471,13 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     if (_isWhiteboardActive) {
       setState(() => _isWhiteboardActive = false);
     }
+
+    await _switchMediaStream(screenSharing: !_isScreenSharing);
+  }
+
+  void _toggleWhiteboard() {
+    if (!_isBroadcasting) return;
+
 
     await _switchMediaStream(screenSharing: !_isScreenSharing);
   }
@@ -369,6 +536,18 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.classData['class_name']),
+        actions: [
+          if (_isBroadcasting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Center(
+                child: Text(
+                  _formatDuration(_elapsedTime),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -482,6 +661,18 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
             'طلبات المداخلة (${_speakRequests.length})',
             _showSpeakRequests,
             isActive: true,
+          ),
+          _buildControlButton(
+            Icons.people,
+            'الحضور (${_presentStudentIds.length}/${_allStudents.length})',
+            _showAttendance,
+            isActive: true,
+          ),
+          _buildControlButton(
+            _isRecording ? Icons.stop_circle : Icons.radio_button_checked,
+            _isRecording ? 'إيقاف التسجيل' : 'بدء التسجيل',
+            _toggleRecording,
+            isActive: _isBroadcasting,
           ),
         ],
       ),

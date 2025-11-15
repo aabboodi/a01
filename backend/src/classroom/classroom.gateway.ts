@@ -19,6 +19,11 @@ export class ClassroomGateway {
   @WebSocketServer()
   server: Server;
 
+  // classId -> (userId -> { fullName })
+  private readonly attendance = new Map<string, Map<string, { fullName: string }>>();
+  // clientId -> { classId, userId }
+  private readonly clients = new Map<string, { classId: string; userId: string }>();
+
   constructor(
     private readonly chatService: ChatService,
     private readonly usersService: UsersService,
@@ -31,17 +36,41 @@ export class ClassroomGateway {
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
+    const clientInfo = this.clients.get(client.id);
+    if (clientInfo) {
+      const { classId, userId } = clientInfo;
+      const classAttendance = this.attendance.get(classId);
+      if (classAttendance) {
+        classAttendance.delete(userId);
+        this.clients.delete(client.id);
+
+        // Notify room that user has left
+        this.server.to(classId).emit('user-left', { userId });
+      }
+    }
   }
 
   @SubscribeMessage('join-room')
   handleJoinRoom(
-    @MessageBody() classId: string,
+    @MessageBody() data: { classId: string; userId: string; fullName: string },
     @ConnectedSocket() client: Socket,
   ): void {
-    console.log(`Client ${client.id} is joining room ${classId}`);
-    client.join(classId);
-    // Acknowledge that the client has joined the room
-    client.emit('joined-room', `Successfully joined room ${classId}`);
+    console.log(`Client ${client.id} (${data.fullName}) is joining room ${data.classId}`);
+    client.join(data.classId);
+
+    // Track attendance
+    if (!this.attendance.has(data.classId)) {
+      this.attendance.set(data.classId, new Map());
+    }
+    this.attendance.get(data.classId)!.set(data.userId, { fullName: data.fullName });
+    this.clients.set(client.id, { classId: data.classId, userId: data.userId });
+
+    // Notify the room that a new user has joined
+    this.server.to(data.classId).emit('user-joined', { userId: data.userId, fullName: data.fullName });
+
+    // Send the current attendance list to the newly joined client
+    const currentAttendance = Array.from(this.attendance.get(data.classId)!.keys());
+    client.emit('current-attendance', currentAttendance);
   }
 
   @SubscribeMessage('chat-message')
