@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package.frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart';
+import 'package:frontend/features/classroom/application/services/mediasoup_client_service.dart';
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
@@ -42,8 +43,8 @@ class StudentClassroomScreen extends StatefulWidget {
 
 class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   late ClassroomService _classroomService;
+  final MediasoupClientService _mediasoupClientService = MediasoupClientService();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
-  RTCPeerConnection? _peerConnection;
 
   // State variables
   String _serverMessage = '';
@@ -54,6 +55,7 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   bool _isMicActive = false; // New state for mic status in free mode
   MediaStream? _localAudioStream; // To hold the local audio stream
   bool _isPaused = false; // New state for session pause
+ConnectionState _connectionState = ConnectionState.none;
 
   // Services
   final ApiChatService _apiChatService = ApiChatService();
@@ -141,28 +143,30 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
           _scrollToBottom();
         }
       },
-      onOfferReceived: (data) async {
-        print("Offer received");
-        await _createPeerConnection();
-        await _peerConnection!.setRemoteDescription(
-          RTCSessionDescription(data['offer']['sdp'], data['offer']['type']),
-        );
-        RTCSessionDescription answer = await _peerConnection!.createAnswer();
-        await _peerConnection!.setLocalDescription(answer);
-        _classroomService.sendAnswer(widget.classData['class_id'], {'sdp': answer.sdp, 'type': answer.type});
+      onRequestToSpeakReceived: (data) {
+        // Student sends, doesn't receive this
       },
-      onAnswerReceived: (data) {
-        // Not typically used by student
+      onPermissionToSpeakReceived: (data) {
+        print("Permission to speak received!");
+        _startAudioBroadcast(data['teacherSocketId']);
       },
-      onIceCandidateReceived: (data) async {
-        if (_peerConnection != null) {
-          await _peerConnection!.addCandidate(
-            RTCIceCandidate(
-              data['candidate']['candidate'],
-              data['candidate']['sdpMid'],
-              data['candidate']['sdpMLineIndex'],
-            ),
-          );
+      // New listener for audio mode changes
+      onAudioModeChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isFreeMicMode = data['isFreeMicMode'];
+            // If mic becomes restricted, turn off the student's mic
+            if (!_isFreeMicMode && _isMicActive) {
+              _toggleMic();
+            }
+          });
+        }
+      },
+      onSessionStateChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isPaused = data['isPaused'];
+          });
         }
       },
       onRequestToSpeakReceived: (data) {
@@ -197,39 +201,52 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
       widget.userData['user_id'],
       widget.userData['full_name'],
     );
+    _classroomService.connectAndJoin(
+      widget.classData['class_id'],
+      widget.userData['user_id'],
+      widget.userData['full_name'],
+    );
+      _mediasoupClientService.initialize(widget.classData['class_id'], _classroomService.socket);
+
+      _classroomService.socket.on('new-producer', (data) {
+_startMediasoupConsumer(data['producerId']);
+      });
+
+      _classroomService.socket.onConnect((_) => setState(() => _connectionState = ConnectionState.active));
+      _classroomService.socket.onConnecting((_) => setState(() => _connectionState = ConnectionState.waiting));
+      _classroomService.socket.onDisconnect((_) => setState(() => _connectionState = ConnectionState.none));
   }
+
+Future<void> _startMediasoupConsumer(String producerId) async {
+try {
+await _mediasoupClientService.createRecvTransport(
+_classroomService.socket,
+widget.classData['class_id'],
+);
+
+final consumer = await _mediasoupClientService.consume(
+socket: _classroomService.socket,
+transport: _mediasoupClientService.recvTransport!,
+producerId: producerId,
+rtpCapabilities: _mediasoupClientService.device.rtpCapabilities,
+);
+
+if (consumer.track != null) {
+_remoteRenderer.srcObject = MediaStream.fromWeb([consumer.track!]);
+}
+} catch (e) {
+print('Error starting mediasoup consumer: $e');
+}
+}
 
   @override
   void dispose() {
     _remoteRenderer.dispose();
-    _peerConnection?.close();
     _localAudioStream?.getTracks().forEach((track) => track.stop());
     _classroomService.dispose();
     _chatController.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _createPeerConnection() async {
-    _peerConnection = await createPeerConnection(_iceServers, {});
-
-    _peerConnection!.onTrack = (event) {
-      if (event.track.kind == 'video' && mounted) {
-        setState(() {
-           _remoteRenderer.srcObject = event.streams[0];
-        });
-      }
-    };
-
-    _peerConnection!.onIceCandidate = (event) {
-      if (event.candidate != null) {
-        _classroomService.sendIceCandidate(widget.classData['class_id'], {
-          'candidate': event.candidate!.candidate,
-          'sdpMid': event.candidate!.sdpMid,
-          'sdpMLineIndex': event.candidate!.sdpMLineIndex,
-        });
-      }
-    };
   }
 
   // --- UI Actions ---
@@ -263,45 +280,37 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     );
   }
 
-  Future<void> _startAudioBroadcast(String teacherSocketId) async {
-    if (_peerConnection == null) {
-      print("Cannot start audio broadcast without a peer connection.");
-      return;
-    }
-
-    try {
-      // Get audio stream
-      MediaStream audioStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
-
-      // Add audio track to the existing connection
-      audioStream.getAudioTracks().forEach((track) {
-        _peerConnection!.addTrack(track, audioStream);
-      });
-
-      // Create a new offer to renegotiate the connection
-      RTCSessionDescription offer = await _peerConnection!.createOffer({
-        'offerToReceiveAudio': 1,
-        'offerToReceiveVideo': 1, // Keep existing video stream
-      });
-      await _peerConnection!.setLocalDescription(offer);
-
-      // Send the offer specifically to the teacher
-      _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type}, targetId: teacherSocketId);
-
-      print("Audio broadcast started and offer sent to teacher.");
-
-    } catch (e) {
-      print("Error starting audio broadcast: $e");
-    }
-  }
-
   // --- Build Method ---
+
+  Widget _buildConnectionIndicator() {
+    IconData icon;
+    Color color;
+    switch (_connectionState) {
+      case ConnectionState.active:
+        icon = Icons.wifi;
+        color = Colors.green;
+        break;
+      case ConnectionState.waiting:
+        icon = Icons.wifi_off;
+        color = Colors.orange;
+        break;
+      default:
+        icon = Icons.perm_scan_wifi_outlined;
+        color = Colors.red;
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Icon(icon, color: color),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.classData['class_name']),
+        actions: [_buildConnectionIndicator()],
       ),
       body: Column(
         children: [
@@ -430,47 +439,25 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   // --- Audio Controls for Free Mic Mode ---
 
   Future<void> _toggleMic() async {
-    if (_peerConnection == null) return;
-
+    // This will now use the same produce mechanism as the teacher
     if (_isMicActive) {
-      // Stop sending audio
-      try {
-        // Find the sender for the audio track and remove it
-        var senders = await _peerConnection!.getSenders();
-        var audioSender = senders.firstWhere((sender) => sender.track?.kind == 'audio', orElse: () => null);
-        if (audioSender != null) {
-          await _peerConnection!.removeTrack(audioSender);
-        }
-
-        // Stop the local audio track
-        _localAudioStream?.getTracks().forEach((track) => track.stop());
-        _localAudioStream = null;
-
-        setState(() => _isMicActive = false);
-
-        // You might need to renegotiate the connection after removing a track
-        // by creating a new offer and sending it to the teacher. This is complex
-        // and might be skipped if audio simply stopping is acceptable.
-      } catch (e) {
-        print("Error stopping mic: $e");
-      }
+      // Stop audio producer
+      // TODO: Implement producer closing logic in MediasoupClientService
+      _localAudioStream?.getTracks().forEach((track) => track.stop());
+      setState(() => _isMicActive = false);
     } else {
-      // Start sending audio
+      // Start audio producer
       try {
         _localAudioStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
-        _localAudioStream!.getAudioTracks().forEach((track) {
-          _peerConnection!.addTrack(track, _localAudioStream!);
-        });
-
+        final audioTrack = _localAudioStream!.getAudioTracks().first;
+        await _mediasoupClientService.produce(
+          socket: _classroomService.socket,
+          transport: _mediasoupClientService.sendTransport!,
+          track: audioTrack,
+        );
         setState(() => _isMicActive = true);
-
-        // Renegotiate: create an offer and send it to everyone (or just the teacher)
-        RTCSessionDescription offer = await _peerConnection!.createOffer();
-        await _peerConnection!.setLocalDescription(offer);
-        _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
-
       } catch (e) {
-        print("Error starting mic: $e");
+        print("Error starting student mic: $e");
       }
     }
   }

@@ -5,9 +5,6 @@ class ClassroomService {
 
   // Callbacks to notify the UI of various events
   final Function(String) onJoinedRoom;
-  final Function(dynamic) onOfferReceived;
-  final Function(dynamic) onAnswerReceived;
-  final Function(dynamic) onIceCandidateReceived;
   final Function(dynamic) onChatMessageReceived;
   final Function(dynamic) onRequestToSpeakReceived;
   final Function(dynamic) onPermissionToSpeakReceived; // For student
@@ -19,9 +16,6 @@ class ClassroomService {
 
   ClassroomService({
     required this.onJoinedRoom,
-    required this.onOfferReceived,
-    required this.onAnswerReceived,
-    required this.onIceCandidateReceived,
     required this.onChatMessageReceived,
     required this.onRequestToSpeakReceived,
     required this.onPermissionToSpeakReceived,
@@ -54,12 +48,7 @@ class ClassroomService {
     socket.on('chat-message', (data) => onChatMessageReceived(data));
     socket.on('request-to-speak', (data) => onRequestToSpeakReceived(data)); // Listen for requests
 
-    // Listen for WebRTC signaling events
-
     // Listen for WebRTC signaling events from other clients
-    socket.on('webrtc-offer', (data) => onOfferReceived(data));
-    socket.on('webrtc-answer', (data) => onAnswerReceived(data));
-    socket.on('webrtc-ice-candidate', (data) => onIceCandidateReceived(data));
     socket.on('permission-to-speak', (data) => onPermissionToSpeakReceived(data));
     socket.on('user-joined', (data) => onUserJoined(data));
     socket.on('user-left', (data) => onUserLeft(data));

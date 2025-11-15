@@ -9,6 +9,8 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
+import { MediasoupService } from '../mediasoup/mediasoup.service';
+import { Router } from 'mediasoup/node/lib/Router';
 
 @WebSocketGateway({
   cors: {
@@ -23,12 +25,16 @@ export class ClassroomGateway {
   private readonly attendance = new Map<string, Map<string, { fullName: string }>>();
   // clientId -> { classId, userId }
   private readonly clients = new Map<string, { classId: string; userId: string }>();
+  private readonly rooms = new Map<string, Router>();
+  private readonly transports = new Map<string, any>(); // Store transports by id
+  private readonly producers = new Map<string, any>(); // Store producers by id
 
   constructor(
     private readonly chatService: ChatService,
     private readonly usersService: UsersService,
     private readonly classesService: ClassesService,
     private readonly attendanceService: AttendanceService,
+    private readonly mediasoupService: MediasoupService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -86,6 +92,32 @@ export class ClassroomGateway {
     // Send the current attendance list to the newly joined client
     const currentAttendance = Array.from(this.attendance.get(data.classId)!.keys());
     client.emit('current-attendance', currentAttendance);
+
+    // Create a mediasoup router for the room if it doesn't exist
+    if (!this.rooms.has(data.classId)) {
+      const worker = this.mediasoupService.getWorker();
+      const router = await worker.createRouter({
+        mediaCodecs: [
+          // Define the codecs you want to support
+          {
+            kind: 'audio',
+            mimeType: 'audio/opus',
+            clockRate: 48000,
+            channels: 2,
+          },
+          {
+            kind: 'video',
+            mimeType: 'video/VP8',
+            clockRate: 90000,
+            parameters: {
+              'x-google-start-bitrate': 1000,
+            },
+          },
+        ],
+      });
+      this.rooms.set(data.classId, router);
+      console.log(`Mediasoup router created for room ${data.classId}`);
+    }
   }
 
   @SubscribeMessage('chat-message')
@@ -117,33 +149,135 @@ export class ClassroomGateway {
     }
   }
 
-  // --- WebRTC Signaling Handlers (Now supports targeted signaling) ---
+  // --- Mediasoup Signaling Handlers ---
 
-  @SubscribeMessage('webrtc-offer')
-  handleWebrtcOffer(
-    @MessageBody() data: { classId: string; offer: any; targetId?: string },
+  @SubscribeMessage('get-router-rtp-capabilities')
+  handleGetRouterRtpCapabilities(
+    @MessageBody() data: { classId: string },
     @ConnectedSocket() client: Socket,
-  ): void {
-    const payload = { offer: data.offer, senderId: client.id };
-    if (data.targetId) {
-      // Send to a specific client if a target is provided (student to teacher)
-      this.server.to(data.targetId).emit('webrtc-offer', payload);
-    } else {
-      // Otherwise, broadcast to the room (teacher's initial broadcast)
-      client.to(data.classId).emit('webrtc-offer', payload);
+  ) {
+    const router = this.rooms.get(data.classId);
+    if (router) {
+      client.emit('router-rtp-capabilities', router.rtpCapabilities);
     }
   }
 
-  @SubscribeMessage('webrtc-answer')
-  handleWebrtcAnswer(
-    @MessageBody() data: { classId: string; answer: any; targetId: string },
+  @SubscribeMessage('create-transport')
+  async handleCreateTransport(
+    @MessageBody() data: { classId: string, isProducer: boolean },
     @ConnectedSocket() client: Socket,
-  ): void {
-    // Answers are always targeted to a specific client
-    this.server.to(data.targetId).emit('webrtc-answer', {
-      answer: data.answer,
-      senderId: client.id,
-    });
+  ) {
+    try {
+      const router = this.rooms.get(data.classId);
+      if (!router) {
+        throw new Error(`Router for class ${data.classId} not found`);
+      }
+
+      const transport = await router.createWebRtcTransport({
+        listenIps: [{ ip: '0.0.0.0', announcedIp: '127.0.0.1' }], // Replace with public IP in production
+        enableUdp: true,
+        enableTcp: true,
+        preferUdp: true,
+      });
+
+      // Store the transport server-side
+      this.transports.set(transport.id, transport);
+
+      client.emit('transport-created', {
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters,
+      });
+
+    } catch (error) {
+      console.error('Error creating transport:', error);
+      client.emit('error', 'Error creating transport');
+    }
+  }
+
+  @SubscribeMessage('connect-transport')
+  async handleConnectTransport(
+    @MessageBody() data: { classId: string; transportId: string; dtlsParameters: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      await transport.connect({ dtlsParameters: data.dtlsParameters });
+      client.emit('transport-connected');
+    } catch (error) {
+      console.error('Error connecting transport:', error);
+      client.emit('error', 'Error connecting transport');
+    }
+  }
+
+  @SubscribeMessage('produce')
+  async handleProduce(
+    @MessageBody() data: { classId: string; transportId: string; kind: any; rtpParameters: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      const producer = await transport.produce({
+        kind: data.kind,
+        rtpParameters: data.rtpParameters,
+      });
+
+      if (producer.kind === 'audio') {
+        producer.setPriority(10); // High priority for audio
+      }
+
+      this.producers.set(producer.id, producer);
+
+      client.emit('produced', { id: producer.id });
+
+      // Notify other clients in the room about the new producer
+      client.to(data.classId).emit('new-producer', { producerId: producer.id });
+
+    } catch (error) {
+      console.error('Error producing:', error);
+      client.emit('error', 'Error producing');
+    }
+  }
+
+  @SubscribeMessage('consume')
+  async handleConsume(
+    @MessageBody() data: { classId: string; transportId: string; producerId: string; rtpCapabilities: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const router = this.rooms.get(data.classId);
+      if (!router || !router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities })) {
+        throw new Error('Cannot consume');
+      }
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      const consumer = await transport.consume({
+        producerId: data.producerId,
+        rtpCapabilities: data.rtpCapabilities,
+        paused: true, // Start paused
+      });
+
+      // Store consumer server-side, and associate with client
+
+      client.emit('consumed', {
+        id: consumer.id,
+        producerId: consumer.producerId,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+      });
+    } catch (error) {
+      console.error('Error consuming:', error);
+      client.emit('error', 'Error consuming');
+    }
   }
 
   @SubscribeMessage('set-audio-mode')
@@ -155,21 +289,6 @@ export class ClassroomGateway {
     client.to(data.classId).emit('audio-mode-changed', {
       isFreeMicMode: data.isFreeMicMode,
     });
-  }
-
-  @SubscribeMessage('webrtc-ice-candidate')
-  handleWebrtcIceCandidate(
-    @MessageBody() data: { classId: string; candidate: any; targetId?: string },
-    @ConnectedSocket() client: Socket,
-  ): void {
-    const payload = { candidate: data.candidate, senderId: client.id };
-    if (data.targetId) {
-      // Send to a specific client
-      this.server.to(data.targetId).emit('webrtc-ice-candidate', payload);
-    } else {
-      // Broadcast to the room
-      client.to(data.classId).emit('webrtc-ice-candidate', payload);
-    }
   }
 
   @SubscribeMessage('request-to-speak')

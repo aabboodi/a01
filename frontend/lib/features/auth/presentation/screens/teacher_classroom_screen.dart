@@ -3,8 +3,9 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart'; // Import chat service
 import 'package:frontend/features/auth/application/services/user_service.dart';
-import 'package.frontend/features/auth/application/services/recording_service.dart';
-import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/auth/application/services/recording_service.dart';
+import 'package:frontend/features/classroom/application/services/mediasoup_client_service.dart';
+import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
@@ -46,13 +47,9 @@ class TeacherClassroomScreen extends StatefulWidget {
 
 class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   late ClassroomService _classroomService;
+  final MediasoupClientService _mediasoupClientService = MediasoupClientService();
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   MediaStream? _localStream;
-  RTCPeerConnection? _peerConnection;
-
-  // Connections for students who are allowed to speak
-  final Map<String, RTCPeerConnection> _studentConnections = {};
-  final Map<String, RTCVideoRenderer> _studentRenderers = {};
 
   // State variables
   bool _isBroadcasting = false;
@@ -90,6 +87,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   // Audio mode state
   bool _isFreeMicMode = false;
   bool _isPaused = false; // New state for session pause
+ConnectionState _connectionState = ConnectionState.none;
 
   // WebRTC configuration
   final Map<String, dynamic> _iceServers = {
@@ -184,54 +182,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           });
         }
       },
-      onAnswerReceived: (data) async {
-        if (_peerConnection != null) {
-          await _peerConnection!.setRemoteDescription(
-            RTCSessionDescription(data['answer']['sdp'], data['answer']['type']),
-          );
-        }
-      },
-      onIceCandidateReceived: (data) async {
-        // This could be from the main broadcast connection or a student connection
-        final connection = _studentConnections[data['senderId']] ?? _peerConnection;
-        if (connection != null) {
-          await connection.addCandidate(
-            RTCIceCandidate(
-              data['candidate']['candidate'],
-              data['candidate']['sdpMid'],
-              data['candidate']['sdpMLineIndex'],
-            ),
-          );
-        }
-      },
-      onOfferReceived: (data) async {
-        // This offer comes from a student who was granted permission to speak
-        final studentSocketId = data['senderId'];
-        print("Offer received from student $studentSocketId");
-
-        // Create a new peer connection for this student
-        final studentConnection = await createPeerConnection(_iceServers, {});
-
-        studentConnection.onTrack = (event) {
-          if (event.track.kind == 'audio' && mounted) {
-            print("Audio track received from student $studentSocketId");
-            // Audio is now only between teacher and student, no relay needed.
-          }
-        };
-
-        await studentConnection.setRemoteDescription(
-          RTCSessionDescription(data['offer']['sdp'], data['offer']['type']),
-        );
-
-        RTCSessionDescription answer = await studentConnection.createAnswer();
-        await studentConnection.setLocalDescription(answer);
-
-        _classroomService.sendAnswer(widget.classData['class_id'], {'sdp': answer.sdp, 'type': answer.type}, targetId: studentSocketId);
-
-        setState(() {
-          _studentConnections[studentSocketId] = studentConnection;
-        });
-      },
       onPermissionToSpeakReceived: (data) {
         // Teacher does not receive this event
       },
@@ -269,15 +219,17 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       _userId!,
       _userName!,
     );
+    _mediasoupClientService.initialize(widget.classData['class_id'], _classroomService.socket);
+
+    _classroomService.socket.onConnect((_) => setState(() => _connectionState = ConnectionState.active));
+    _classroomService.socket.onConnecting((_) => setState(() => _connectionState = ConnectionState.waiting));
+    _classroomService.socket.onDisconnect((_) => setState(() => _connectionState = ConnectionState.none));
   }
 
   @override
   void dispose() {
     _localRenderer.dispose();
     _localStream?.getTracks().forEach((track) => track.stop());
-    _peerConnection?.close();
-    _studentConnections.forEach((key, value) => value.close());
-    _studentRenderers.forEach((key, value) => value.dispose());
     _mediaRecorder?.dispose();
     _classroomService.dispose();
     _chatController.dispose();
@@ -450,36 +402,53 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     if (_isBroadcasting) {
       await _stopBroadcast();
     } else {
-      await _startBroadcast();
+await _startMediasoupBroadcast();
     }
   }
 
-  Future<void> _startBroadcast() async {
+Future<void> _startMediasoupBroadcast() async {
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
       _localRenderer.srcObject = _localStream;
 
-      await _createPeerConnection();
+final videoTrack = _localStream!.getVideoTracks().first;
+final audioTrack = _localStream!.getAudioTracks().first;
 
-      RTCSessionDescription offer = await _peerConnection!.createOffer();
-      await _peerConnection!.setLocalDescription(offer);
-      _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
+await _mediasoupClientService.createSendTransport(
+_classroomService.socket,
+widget.classData['class_id'],
+);
+
+await _mediasoupClientService.produce(
+socket: _classroomService.socket,
+transport: _mediasoupClientService.sendTransport!,
+track: audioTrack,
+);
+
+await _mediasoupClientService.produce(
+socket: _classroomService.socket,
+transport: _mediasoupClientService.sendTransport!,
+track: videoTrack,
+encodings: [
+// Simulcast encodings
+ScalabilityMode.parse('L1T3'),
+],
+);
 
       setState(() {
         _isBroadcasting = true;
-        _startTimer(); // Starts from zero
+_startTimer();
       });
     } catch (e) {
-      print('Error starting broadcast: $e');
+print('Error starting mediasoup broadcast: $e');
     }
   }
 
   Future<void> _stopBroadcast() async {
     try {
       _localStream?.getTracks().forEach((track) => track.stop());
-      await _peerConnection?.close();
-      _peerConnection = null;
       _localRenderer.srcObject = null;
+// TODO: Close mediasoup transports and producers
       setState(() {
         _isBroadcasting = false;
         _isScreenSharing = false;
@@ -514,7 +483,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   }
 
   Future<void> _switchMediaStream({required bool screenSharing}) async {
-    if (_peerConnection == null) return;
+    if (_mediasoupClientService.sendTransport == null) return;
 
     _localStream?.getTracks().forEach((track) => track.stop());
 
@@ -525,8 +494,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     _localRenderer.srcObject = _localStream;
 
     var videoTrack = _localStream!.getVideoTracks()[0];
-    var sender = _peerConnection!.senders.firstWhere((s) => s.track?.kind == 'video');
-    await sender.replaceTrack(videoTrack);
+    await _mediasoupClientService.sendTransport!.replaceTrack(videoTrack);
 
     setState(() => _isScreenSharing = screenSharing);
   }
@@ -551,6 +519,29 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
 
   // --- Build Method ---
 
+  Widget _buildConnectionIndicator() {
+    IconData icon;
+    Color color;
+    switch (_connectionState) {
+      case ConnectionState.active:
+        icon = Icons.wifi;
+        color = Colors.green;
+        break;
+      case ConnectionState.waiting:
+        icon = Icons.wifi_off;
+        color = Colors.orange;
+        break;
+      default:
+        icon = Icons.perm_scan_wifi_outlined;
+        color = Colors.red;
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Icon(icon, color: color),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -567,6 +558,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
                 ),
               ),
             ),
+          _buildConnectionIndicator(),
         ],
       ),
       body: Column(

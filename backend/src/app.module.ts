@@ -13,6 +13,7 @@ import { RecordingsModule } from './recordings/recordings.module';
 import { GradesModule } from './grades/grades.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ReportsModule } from './reports/reports.module';
+import { MediasoupModule } from './mediasoup/mediasoup.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -46,6 +47,7 @@ import { join } from 'path';
     GradesModule,
     AttendanceModule,
     ReportsModule,
+    MediasoupModule,
   ],
   controllers: [AppController],
   providers: [AppService],
