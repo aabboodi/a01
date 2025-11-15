@@ -67,4 +67,18 @@ class UserService {
       throw Exception('A network error occurred: ${e.toString()}');
     }
   }
+
+  Future<List<dynamic>> getUsersByClass(String classId) async {
+    final url = Uri.parse('$_baseUrl/classes/$classId/students');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load students for class');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
 }
