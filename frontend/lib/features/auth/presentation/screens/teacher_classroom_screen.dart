@@ -8,6 +8,12 @@ import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widg
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
 import 'package:url_launcher/url_launcher.dart';
+import 'package.frontend/features/auth/application/services/user_service.dart';
+import 'package.frontend/features/auth/application/services/recording_service.dart';
+import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
+import 'package:shared_preferences/shared_preferences.dart'; // To get token
 
 // Data models for chat and speak requests
 class ChatMessage {
@@ -71,11 +77,15 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   final UserService _apiUserService = UserService();
   final RecordingService _recordingService = RecordingService();
 
+
   // Recording state
   bool _isRecording = false;
   String? _currentRecordingId;
   MediaRecorder? _mediaRecorder;
   String? _recordedFilePath;
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
 
   // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
@@ -133,6 +143,12 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           recordingUrl: url,
         );
       }).toList();
+      final historicalMessages = history.map((msg) => ChatMessage(
+        message: msg['message'],
+        senderId: msg['user']?['user_id'] ?? 'unknown',
+        isLocal: msg['user']?['user_id'] == _userId,
+        authorName: msg['user']?['full_name'] ?? 'Unknown User',
+      )).toList();
 
       if (mounted) {
         setState(() {
@@ -162,6 +178,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
               authorName: isSystem ? 'System' : data['user']['full_name'],
               isSystemMessage: isSystem,
               recordingUrl: url,
+              authorName: data['user']['full_name'],
             ));
           });
           _scrollToBottom();
@@ -366,6 +383,13 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           // Upload the file
           await _recordingService.uploadRecording(_currentRecordingId!, path);
 
+      if (_currentRecordingId != null) {
+        try {
+          await _recordingService.stopRecording(_currentRecordingId!);
+          setState(() {
+            _isRecording = false;
+            _currentRecordingId = null;
+          });
         } catch (e) {
           print("Failed to stop recording: $e");
         }
