@@ -3,9 +3,9 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package.frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart';
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 // Data model for ChatMessage
 class ChatMessage {
@@ -50,6 +50,10 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   bool _requestSent = false;
   bool _isWhiteboardVisible = true;
   String? _userId;
+  bool _isFreeMicMode = false; // New state for audio mode
+  bool _isMicActive = false; // New state for mic status in free mode
+  MediaStream? _localAudioStream; // To hold the local audio stream
+  bool _isPaused = false; // New state for session pause
 
   // Services
   final ApiChatService _apiChatService = ApiChatService();
@@ -168,14 +172,38 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         print("Permission to speak received!");
         _startAudioBroadcast(data['teacherSocketId']);
       },
+      // New listener for audio mode changes
+      onAudioModeChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isFreeMicMode = data['isFreeMicMode'];
+            // If mic becomes restricted, turn off the student's mic
+            if (!_isFreeMicMode && _isMicActive) {
+              _toggleMic();
+            }
+          });
+        }
+      },
+      onSessionStateChanged: (data) {
+        if (mounted) {
+          setState(() {
+            _isPaused = data['isPaused'];
+          });
+        }
+      },
     );
-    _classroomService.connectAndJoin(widget.classData['class_id']);
+    _classroomService.connectAndJoin(
+      widget.classData['class_id'],
+      widget.userData['user_id'],
+      widget.userData['full_name'],
+    );
   }
 
   @override
   void dispose() {
     _remoteRenderer.dispose();
     _peerConnection?.close();
+    _localAudioStream?.getTracks().forEach((track) => track.stop());
     _classroomService.dispose();
     _chatController.dispose();
     _scrollController.dispose();
@@ -283,6 +311,7 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
             child: Container(
               color: Colors.black,
               child: Stack(
+                alignment: Alignment.center,
                 children: [
                   RTCVideoView(_remoteRenderer, mirror: false),
                   // The WhiteboardWidget for the student is "read-only"
@@ -291,6 +320,24 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
                       socket: _classroomService.socket,
                       classId: widget.classData['class_id'],
                       isTeacher: false, // Student cannot draw
+                    ),
+                  // Pause Overlay
+                  if (_isPaused)
+                    Container(
+                      color: Colors.black.withOpacity(0.7),
+                      child: const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.pause_circle_filled, color: Colors.white, size: 64),
+                            SizedBox(height: 16),
+                            Text(
+                              'تم إيقاف الجلسة مؤقتاً',
+                              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -319,13 +366,6 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     return match != null ? 'http://10.0.2.2:3000/${match.group(1)}' : null;
   }
 
-  Future<void> _launchUrl(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
   Widget _buildChatView() {
     return Column(
       children: [
@@ -343,8 +383,14 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
                     title: const Text('New Recording Available'),
                     subtitle: const Text('A new session recording is ready for download.'),
                     trailing: IconButton(
-                      icon: const Icon(Icons.download),
-                      onPressed: () => _launchUrl(msg.recordingUrl!),
+                      icon: const Icon(Icons.play_circle_fill),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => VideoPlayerScreen(videoUrl: msg.recordingUrl!),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 );
@@ -381,6 +427,55 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     );
   }
 
+  // --- Audio Controls for Free Mic Mode ---
+
+  Future<void> _toggleMic() async {
+    if (_peerConnection == null) return;
+
+    if (_isMicActive) {
+      // Stop sending audio
+      try {
+        // Find the sender for the audio track and remove it
+        var senders = await _peerConnection!.getSenders();
+        var audioSender = senders.firstWhere((sender) => sender.track?.kind == 'audio', orElse: () => null);
+        if (audioSender != null) {
+          await _peerConnection!.removeTrack(audioSender);
+        }
+
+        // Stop the local audio track
+        _localAudioStream?.getTracks().forEach((track) => track.stop());
+        _localAudioStream = null;
+
+        setState(() => _isMicActive = false);
+
+        // You might need to renegotiate the connection after removing a track
+        // by creating a new offer and sending it to the teacher. This is complex
+        // and might be skipped if audio simply stopping is acceptable.
+      } catch (e) {
+        print("Error stopping mic: $e");
+      }
+    } else {
+      // Start sending audio
+      try {
+        _localAudioStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+        _localAudioStream!.getAudioTracks().forEach((track) {
+          _peerConnection!.addTrack(track, _localAudioStream!);
+        });
+
+        setState(() => _isMicActive = true);
+
+        // Renegotiate: create an offer and send it to everyone (or just the teacher)
+        RTCSessionDescription offer = await _peerConnection!.createOffer();
+        await _peerConnection!.setLocalDescription(offer);
+        _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
+
+      } catch (e) {
+        print("Error starting mic: $e");
+      }
+    }
+  }
+
+
   Widget _buildControls() {
     return Container(
       padding: const EdgeInsets.all(16.0),
@@ -388,11 +483,18 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildControlButton(
-            Icons.pan_tool,
-            'طلب مداخلة',
-            _requestSent ? null : _handleRequestToSpeak,
-          ),
+          if (_isFreeMicMode)
+            _buildControlButton(
+              _isMicActive ? Icons.mic_off : Icons.mic,
+              _isMicActive ? 'إيقاف المايك' : 'تفعيل المايك',
+              _toggleMic,
+            )
+          else
+            _buildControlButton(
+              Icons.pan_tool,
+              'طلب مداخلة',
+              _requestSent ? null : _handleRequestToSpeak,
+            ),
           _buildControlButton(
             _isWhiteboardVisible ? Icons.edit_off : Icons.edit,
             _isWhiteboardVisible ? 'إخفاء السبورة' : 'عرض السبورة',

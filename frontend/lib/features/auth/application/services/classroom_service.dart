@@ -14,6 +14,8 @@ class ClassroomService {
   final Function(dynamic) onUserJoined;
   final Function(dynamic) onUserLeft;
   final Function(dynamic) onCurrentAttendanceReceived;
+  final Function(dynamic) onAudioModeChanged; // New callback
+  final Function(dynamic) onSessionStateChanged; // New callback
 
   ClassroomService({
     required this.onJoinedRoom,
@@ -26,6 +28,8 @@ class ClassroomService {
     required this.onUserJoined,
     required this.onUserLeft,
     required this.onCurrentAttendanceReceived,
+    required this.onAudioModeChanged,
+    required this.onSessionStateChanged,
   });
 
   void connectAndJoin(String classId, String userId, String fullName) {
@@ -60,6 +64,8 @@ class ClassroomService {
     socket.on('user-joined', (data) => onUserJoined(data));
     socket.on('user-left', (data) => onUserLeft(data));
     socket.on('current-attendance', (data) => onCurrentAttendanceReceived(data));
+    socket.on('audio-mode-changed', (data) => onAudioModeChanged(data)); // Listen for audio mode change
+    socket.on('session-state-changed', (data) => onSessionStateChanged(data)); // Listen for session state change
 
     socket.connect();
   }

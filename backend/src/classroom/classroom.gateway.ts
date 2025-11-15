@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 @WebSocketGateway({
   cors: {
@@ -35,7 +36,7 @@ export class ClassroomGateway {
     console.log(`Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
     const clientInfo = this.clients.get(client.id);
     if (clientInfo) {
@@ -59,10 +60,10 @@ export class ClassroomGateway {
   }
 
   @SubscribeMessage('join-room')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { classId: string; userId: string; fullName: string },
     @ConnectedSocket() client: Socket,
-  ): void {
+  ): Promise<void {
     console.log(`Client ${client.id} (${data.fullName}) is joining room ${data.classId}`);
     client.join(data.classId);
 
@@ -146,6 +147,17 @@ export class ClassroomGateway {
     });
   }
 
+  @SubscribeMessage('set-audio-mode')
+  handleSetAudioMode(
+    @MessageBody() data: { classId: string; isFreeMicMode: boolean },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the new audio mode to everyone else in the room
+    client.to(data.classId).emit('audio-mode-changed', {
+      isFreeMicMode: data.isFreeMicMode,
+    });
+  }
+
   @SubscribeMessage('webrtc-ice-candidate')
   handleWebrtcIceCandidate(
     @MessageBody() data: { classId: string; candidate: any; targetId?: string },
@@ -186,6 +198,16 @@ export class ClassroomGateway {
   }
 
   // --- Whiteboard Drawing Handler ---
+
+  @SubscribeMessage('session-state-changed')
+  handleSessionStateChanged(
+    @MessageBody() data: { classId: string; isPaused: boolean },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    client.to(data.classId).emit('session-state-changed', {
+      isPaused: data.isPaused,
+    });
+  }
 
   @SubscribeMessage('draw-event')
   handleDrawEvent(

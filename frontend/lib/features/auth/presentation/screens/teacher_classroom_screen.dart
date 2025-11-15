@@ -5,13 +5,7 @@ import 'package:frontend/features/auth/application/services/chat_service.dart'; 
 import 'package:frontend/features/auth/application/services/user_service.dart';
 import 'package.frontend/features/auth/application/services/recording_service.dart';
 import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
-import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
-import 'package:shared_preferences/shared_preferences.dart'; // To get token
-import 'package:url_launcher/url_launcher.dart';
-import 'package.frontend/features/auth/application/services/user_service.dart';
-import 'package.frontend/features/auth/application/services/recording_service.dart';
-import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
-import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
 
@@ -77,15 +71,11 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   final UserService _apiUserService = UserService();
   final RecordingService _recordingService = RecordingService();
 
-
   // Recording state
   bool _isRecording = false;
   String? _currentRecordingId;
   MediaRecorder? _mediaRecorder;
   String? _recordedFilePath;
-
-  // Services
-  final ApiChatService _apiChatService = ApiChatService();
 
   // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
@@ -96,6 +86,10 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   // Attendance state
   final Set<String> _presentStudentIds = {};
   List<dynamic> _allStudents = []; // Will be fetched
+
+  // Audio mode state
+  bool _isFreeMicMode = false;
+  bool _isPaused = false; // New state for session pause
 
   // WebRTC configuration
   final Map<String, dynamic> _iceServers = {
@@ -143,12 +137,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           recordingUrl: url,
         );
       }).toList();
-      final historicalMessages = history.map((msg) => ChatMessage(
-        message: msg['message'],
-        senderId: msg['user']?['user_id'] ?? 'unknown',
-        isLocal: msg['user']?['user_id'] == _userId,
-        authorName: msg['user']?['full_name'] ?? 'Unknown User',
-      )).toList();
 
       if (mounted) {
         setState(() {
@@ -178,7 +166,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
               authorName: isSystem ? 'System' : data['user']['full_name'],
               isSystemMessage: isSystem,
               recordingUrl: url,
-              authorName: data['user']['full_name'],
             ));
           });
           _scrollToBottom();
@@ -270,6 +257,12 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           });
         }
       },
+      onAudioModeChanged: (data) {
+        // Teacher does not need to react to this event, but the callback is required.
+      },
+      onSessionStateChanged: (data) {
+        // Teacher sends this event, doesn't receive it.
+      },
     );
     _classroomService.connectAndJoin(
       widget.classData['class_id'],
@@ -341,8 +334,11 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
 
   // --- Timer Controls ---
 
-  void _startTimer() {
-    _elapsedTime = Duration.zero;
+  void _startTimer({bool resume = false}) {
+    if (!resume) {
+      _elapsedTime = Duration.zero;
+    }
+    _timer?.cancel(); // Ensure no multiple timers are running
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -383,13 +379,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           // Upload the file
           await _recordingService.uploadRecording(_currentRecordingId!, path);
 
-      if (_currentRecordingId != null) {
-        try {
-          await _recordingService.stopRecording(_currentRecordingId!);
-          setState(() {
-            _isRecording = false;
-            _currentRecordingId = null;
-          });
         } catch (e) {
           print("Failed to stop recording: $e");
         }
@@ -478,7 +467,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
 
       setState(() {
         _isBroadcasting = true;
-        _startTimer();
+        _startTimer(); // Starts from zero
       });
     } catch (e) {
       print('Error starting broadcast: $e');
@@ -628,13 +617,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     return match != null ? 'http://10.0.2.2:3000/${match.group(1)}' : null;
   }
 
-  Future<void> _launchUrl(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
   Widget _buildChatView() {
     return Column(
       children: [
@@ -652,8 +634,14 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
                     title: const Text('New Recording Available'),
                     subtitle: const Text('A new session recording is ready for download.'),
                     trailing: IconButton(
-                      icon: const Icon(Icons.download),
-                      onPressed: () => _launchUrl(msg.recordingUrl!),
+                      icon: const Icon(Icons.play_circle_fill),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => VideoPlayerScreen(videoUrl: msg.recordingUrl!),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 );
@@ -732,9 +720,61 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
             _toggleRecording,
             isActive: _isBroadcasting,
           ),
+          _buildControlButton(
+            _isFreeMicMode ? Icons.mic : Icons.mic_off,
+            _isFreeMicMode ? 'تقييد الصوت' : 'فتح الصوت',
+            _toggleFreeMicMode,
+            isActive: _isBroadcasting,
+          ),
+          _buildControlButton(
+            _isPaused ? Icons.play_arrow : Icons.pause,
+            _isPaused ? 'استئناف' : 'إيقاف مؤقت',
+            _togglePause,
+            isActive: _isBroadcasting,
+          ),
         ],
       ),
     );
+  }
+
+  void _togglePause() {
+    if (!_isBroadcasting) return;
+
+    setState(() {
+      _isPaused = !_isPaused;
+    });
+
+    // Toggle media tracks
+    _localStream?.getTracks().forEach((track) {
+      track.enabled = !_isPaused;
+    });
+
+    // Pause/Resume timer
+    if (_isPaused) {
+      _timer?.cancel();
+    } else {
+      _startTimer(resume: true);
+    }
+
+    // Notify clients
+    _classroomService.socket.emit('session-state-changed', {
+      'classId': widget.classData['class_id'],
+      'isPaused': _isPaused,
+    });
+  }
+
+  void _toggleFreeMicMode() {
+    if (!_isBroadcasting) return;
+
+    setState(() {
+      _isFreeMicMode = !_isFreeMicMode;
+    });
+
+    // Notify the backend and other clients
+    _classroomService.socket.emit('set-audio-mode', {
+      'classId': widget.classData['class_id'],
+      'isFreeMicMode': _isFreeMicMode,
+    });
   }
 
   Widget _buildControlButton(IconData icon, String label, VoidCallback onPressed, {bool isActive = true}) {
