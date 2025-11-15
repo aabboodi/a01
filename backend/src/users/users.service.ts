@@ -56,4 +56,12 @@ export class UsersService {
     const user = await this.findOneById(userId); // Reuse findOneById to handle not found error
     await this.userRepository.remove(user);
   }
+
+  async findAdmin(): Promise<User> {
+    const admin = await this.userRepository.findOne({ where: { role: 'admin' } });
+    if (!admin) {
+      throw new NotFoundException('No admin user found.');
+    }
+    return admin;
+  }
 }
