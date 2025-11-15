@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/features/auth/application/services/classroom_service.dart';
+import 'package:frontend/features/auth/application/services/chat_service.dart'; // Import chat service
+import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
+import 'package:shared_preferences/shared_preferences.dart'; // To get token
 
-// ... (ChatMessage and SpeakRequest classes remain the same)
+// Data models for chat and speak requests
 class ChatMessage {
   final String message;
   final String senderId;
   final bool isLocal;
+  final String authorName;
 
-  ChatMessage({required this.message, required this.senderId, required this.isLocal});
+  ChatMessage({
+    required this.message,
+    required this.senderId,
+    required this.isLocal,
+    required this.authorName,
+  });
 }
 
 class SpeakRequest {
@@ -18,7 +28,6 @@ class SpeakRequest {
 
   SpeakRequest({required this.studentId, required this.studentName, required this.socketId});
 }
-
 
 class TeacherClassroomScreen extends StatefulWidget {
   final Map<String, dynamic> classData;
@@ -33,11 +42,23 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   MediaStream? _localStream;
   RTCPeerConnection? _peerConnection;
-  bool _isBroadcasting = false;
-  bool _isScreenSharing = false; // New state for screen sharing
-  String _serverMessage = '';
 
-  // ... (Chat and Speak Requests state remain the same)
+  // Connections for students who are allowed to speak
+  final Map<String, RTCPeerConnection> _studentConnections = {};
+  final Map<String, RTCVideoRenderer> _studentRenderers = {};
+
+  // State variables
+  bool _isBroadcasting = false;
+  bool _isScreenSharing = false;
+  bool _isWhiteboardActive = false; // New state for the whiteboard
+  String _serverMessage = '';
+  String? _userId;
+  String? _userName;
+
+  // Services
+  final ApiChatService _apiChatService = ApiChatService();
+
+  // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -58,12 +79,44 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
 
   Future<void> _initialize() async {
     await _localRenderer.initialize();
+    await _loadUserData();
     _setupClassroomService();
+    _loadChatHistory();
+  }
+
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token != null) {
+      final decodedToken = JwtDecoder.decode(token);
+      _userId = decodedToken['userId'];
+      _userName = decodedToken['loginCode']; // Assuming loginCode is the name for now
+    }
+  }
+
+  Future<void> _loadChatHistory() async {
+    try {
+      final history = await _apiChatService.getChatHistory(widget.classData['class_id']);
+      final historicalMessages = history.map((msg) => ChatMessage(
+        message: msg['message'],
+        senderId: msg['user']?['user_id'] ?? 'unknown',
+        isLocal: msg['user']?['user_id'] == _userId,
+        authorName: msg['user']?['full_name'] ?? 'Unknown User',
+      )).toList();
+
+      if (mounted) {
+        setState(() {
+          _chatMessages.addAll(historicalMessages);
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print("Failed to load chat history: $e");
+    }
   }
 
   void _setupClassroomService() {
-    // ... (Service setup remains the same)
-        _classroomService = ClassroomService(
+    _classroomService = ClassroomService(
       onJoinedRoom: (message) {
         if (mounted) setState(() => _serverMessage = message);
       },
@@ -73,7 +126,8 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
             _chatMessages.add(ChatMessage(
               message: data['message'],
               senderId: data['senderId'],
-              isLocal: false,
+              isLocal: data['user']['user_id'] == _userId,
+              authorName: data['user']['full_name'],
             ));
           });
           _scrollToBottom();
@@ -92,14 +146,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           });
         }
       },
-      onOfferReceived: (data) {},
-    _classroomService = ClassroomService(
-      onJoinedRoom: (message) {
-        if (mounted) setState(() => _serverMessage = message);
-      },
-      onOfferReceived: (data) {
-        // Teachers primarily send offers, but this could be useful for other scenarios
-      },
       onAnswerReceived: (data) async {
         if (_peerConnection != null) {
           await _peerConnection!.setRemoteDescription(
@@ -108,8 +154,10 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
         }
       },
       onIceCandidateReceived: (data) async {
-        if (_peerConnection != null) {
-          await _peerConnection!.addCandidate(
+        // This could be from the main broadcast connection or a student connection
+        final connection = _studentConnections[data['senderId']] ?? _peerConnection;
+        if (connection != null) {
+          await connection.addCandidate(
             RTCIceCandidate(
               data['candidate']['candidate'],
               data['candidate']['sdpMid'],
@@ -118,32 +166,62 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           );
         }
       },
+      onOfferReceived: (data) async {
+        // This offer comes from a student who was granted permission to speak
+        final studentSocketId = data['senderId'];
+        print("Offer received from student $studentSocketId");
+
+        // Create a new peer connection for this student
+        final studentConnection = await createPeerConnection(_iceServers, {});
+
+        studentConnection.onTrack = (event) {
+          if (event.track.kind == 'audio' && mounted) {
+            print("Audio track received from student $studentSocketId");
+            // Audio is now only between teacher and student, no relay needed.
+          }
+        };
+
+        await studentConnection.setRemoteDescription(
+          RTCSessionDescription(data['offer']['sdp'], data['offer']['type']),
+        );
+
+        RTCSessionDescription answer = await studentConnection.createAnswer();
+        await studentConnection.setLocalDescription(answer);
+
+        _classroomService.sendAnswer(widget.classData['class_id'], {'sdp': answer.sdp, 'type': answer.type}, targetId: studentSocketId);
+
+        setState(() {
+          _studentConnections[studentSocketId] = studentConnection;
+        });
+      },
+      onPermissionToSpeakReceived: (data) {
+        // Teacher does not receive this event
+      },
     );
     _classroomService.connectAndJoin(widget.classData['class_id']);
   }
 
   @override
   void dispose() {
-    // ... (Dispose logic remains the same)
-        _localRenderer.dispose();
+    _localRenderer.dispose();
     _localStream?.getTracks().forEach((track) => track.stop());
     _peerConnection?.close();
+    _studentConnections.forEach((key, value) => value.close());
+    _studentRenderers.forEach((key, value) => value.dispose());
     _classroomService.dispose();
     _chatController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  // ... (Chat and Speak Requests functions remain the same)
-    void _sendMessage() {
+  // --- UI Actions ---
+
+  void _sendMessage() {
     final message = _chatController.text.trim();
-    if (message.isNotEmpty) {
-      _classroomService.sendChatMessage(widget.classData['class_id'], message);
-      setState(() {
-        _chatMessages.add(ChatMessage(message: message, senderId: 'me', isLocal: true));
-      });
+    if (message.isNotEmpty && _userId != null) {
+      _classroomService.sendChatMessage(widget.classData['class_id'], message, userId: _userId!);
+      // The message will be added via the 'onChatMessageReceived' listener to avoid duplication
       _chatController.clear();
-      _scrollToBottom();
     }
   }
 
@@ -168,7 +246,11 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
               trailing: ElevatedButton(
                 child: const Text('سماح'),
                 onPressed: () {
-                  print('Allowing ${request.studentName} to speak.');
+                  _classroomService.allowToSpeak(request.socketId);
+                  // Remove the request from the list after allowing
+                  setState(() {
+                    _speakRequests.removeWhere((r) => r.socketId == request.socketId);
+                  });
                   Navigator.pop(context);
                 },
               ),
@@ -179,41 +261,27 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     );
   }
 
+  // --- Broadcasting and Media Controls ---
+
   Future<void> _toggleBroadcast() async {
     if (_isBroadcasting) {
       await _stopBroadcast();
-      return;
+    } else {
+      await _startBroadcast();
     }
-    await _startBroadcast();
   }
-
-  Future<void> _startBroadcast({bool screenSharing = false}) async {
-    try {
-      if (screenSharing) {
-        _localStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': true});
-      } else {
-        _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
-      }
 
   Future<void> _startBroadcast() async {
     try {
-      _localStream = await navigator.mediaDevices.getUserMedia({
-        'video': true,
-        'audio': true,
-      });
+      _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
       _localRenderer.srcObject = _localStream;
 
       await _createPeerConnection();
 
-      // Create and send an offer
       RTCSessionDescription offer = await _peerConnection!.createOffer();
       await _peerConnection!.setLocalDescription(offer);
       _classroomService.sendOffer(widget.classData['class_id'], {'sdp': offer.sdp, 'type': offer.type});
 
-      setState(() {
-        _isBroadcasting = true;
-        _isScreenSharing = screenSharing;
-      });
       setState(() => _isBroadcasting = true);
     } catch (e) {
       print('Error starting broadcast: $e');
@@ -222,15 +290,14 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
 
   Future<void> _stopBroadcast() async {
     try {
-      _localStream?.getTracks().forEach((track) {
-        track.stop();
-      });
+      _localStream?.getTracks().forEach((track) => track.stop());
       await _peerConnection?.close();
       _peerConnection = null;
       _localRenderer.srcObject = null;
       setState(() {
         _isBroadcasting = false;
         _isScreenSharing = false;
+        _isWhiteboardActive = false;
       });
     } catch (e) {
       print('Error stopping broadcast: $e');
@@ -238,35 +305,40 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   }
 
   Future<void> _toggleScreenShare() async {
-    if (!_isBroadcasting) return; // Can only share screen if already broadcasting
+    if (!_isBroadcasting) return;
 
-    if (_isScreenSharing) {
-      // Switch back to camera
-      await _switchMediaStream(screenSharing: false);
-    } else {
-      // Switch to screen sharing
-      await _switchMediaStream(screenSharing: true);
+    // Turn off whiteboard if active, as they conflict for screen space
+    if (_isWhiteboardActive) {
+      setState(() => _isWhiteboardActive = false);
     }
+
+    await _switchMediaStream(screenSharing: !_isScreenSharing);
+  }
+
+  void _toggleWhiteboard() {
+    if (!_isBroadcasting) return;
+
+    // Turn off screen sharing if active
+    if (_isScreenSharing) {
+       _switchMediaStream(screenSharing: false);
+    }
+
+    setState(() => _isWhiteboardActive = !_isWhiteboardActive);
   }
 
   Future<void> _switchMediaStream({required bool screenSharing}) async {
     if (_peerConnection == null) return;
 
-    // Stop current stream
     _localStream?.getTracks().forEach((track) => track.stop());
 
-    // Get new stream
-    if (screenSharing) {
-      _localStream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': true});
-    } else {
-      _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
-    }
+    _localStream = screenSharing
+        ? await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': true})
+        : await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
 
     _localRenderer.srcObject = _localStream;
 
-    // Replace the video track in the existing peer connection
     var videoTrack = _localStream!.getVideoTracks()[0];
-    var sender = await _peerConnection!.getSenders().firstWhere((s) => s.track?.kind == 'video');
+    var sender = _peerConnection!.senders.firstWhere((s) => s.track?.kind == 'video');
     await sender.replaceTrack(videoTrack);
 
     setState(() => _isScreenSharing = screenSharing);
@@ -275,16 +347,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   Future<void> _createPeerConnection() async {
     _peerConnection = await createPeerConnection(_iceServers, {});
 
-      setState(() => _isBroadcasting = false);
-    } catch (e) {
-      print('Error stopping broadcast: $e');
-    }
-  }
-
-  Future<void> _createPeerConnection() async {
-    _peerConnection = await createPeerConnection(_iceServers, {});
-
-    // Listen for ICE candidates and send them to the other peer
     _peerConnection!.onIceCandidate = (event) {
       if (event.candidate != null) {
         _classroomService.sendIceCandidate(widget.classData['class_id'], {
@@ -295,28 +357,38 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       }
     };
 
-    // Add local stream tracks to the peer connection
     _localStream?.getTracks().forEach((track) {
       _peerConnection?.addTrack(track, _localStream!);
     });
   }
 
+  // --- Build Method ---
+
   @override
   Widget build(BuildContext context) {
-    // UI remains largely the same
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.classData['class_name']),
       ),
       body: Column(
         children: [
-          // Video View
+          // Video/Whiteboard View
           Expanded(
             flex: 3,
             child: Container(
               color: Colors.black,
               child: _isBroadcasting
-                  ? RTCVideoView(_localRenderer, mirror: _isScreenSharing ? false : true)
+                  ? Stack(
+                      children: [
+                        RTCVideoView(_localRenderer, mirror: !_isScreenSharing),
+                        if (_isWhiteboardActive)
+                          WhiteboardWidget(
+                            socket: _classroomService.socket,
+                            classId: widget.classData['class_id'],
+                            isTeacher: true,
+                          ),
+                      ],
+                    )
                   : const Center(
                       child: Text('البث متوقف', style: TextStyle(color: Colors.white)),
                     ),
@@ -325,86 +397,108 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
           // Chat View
           Expanded(
             flex: 1,
-            child: Column(
-              // ... (Chat UI remains the same)
-                  children: [
-                Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    itemCount: _chatMessages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _chatMessages[index];
-                      return ListTile(
-                        title: Text(msg.message),
-                        subtitle: Text(msg.isLocal ? 'أنا' : 'طالب'),
-                        tileColor: msg.isLocal ? Colors.blue.withOpacity(0.1) : null,
-                      );
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _chatController,
-                          decoration: const InputDecoration(
-                            hintText: 'اكتب رسالة...',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: _sendMessage,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: _buildChatView(),
+          ),
+          // Status Bar
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
             child: Text('حالة الخادم: $_serverMessage'),
           ),
           // Controls
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            color: Colors.grey[200],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildControlButton(
-                  _isBroadcasting ? Icons.videocam_off : Icons.videocam,
-                  _isBroadcasting ? 'إيقاف البث' : 'بدء البث',
-                  _toggleBroadcast,
+          _buildControls(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatView() {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            itemCount: _chatMessages.length,
+            itemBuilder: (context, index) {
+              final msg = _chatMessages[index];
+              return ListTile(
+                title: Text(msg.authorName, style: TextStyle(fontWeight: FontWeight.bold, color: msg.isLocal ? Colors.blue : Colors.black)),
+                subtitle: Text(msg.message),
+                tileColor: msg.isLocal ? Colors.blue.withOpacity(0.05) : null,
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _chatController,
+                  decoration: const InputDecoration(
+                    hintText: 'اكتب رسالة...',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-                _buildControlButton(
-                  _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
-                  _isScreenSharing ? 'إيقاف المشاركة' : 'مشاركة الشاشة',
-                  _toggleScreenShare,
-                ),
-                _buildControlButton(
-                  Icons.pan_tool,
-                  'طلبات المداخلة (${_speakRequests.length})',
-                  _showSpeakRequests,
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: _sendMessage,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControls() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      color: Colors.grey[200],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildControlButton(
+            _isBroadcasting ? Icons.videocam_off : Icons.videocam,
+            _isBroadcasting ? 'إيقاف البث' : 'بدء البث',
+            _toggleBroadcast,
+          ),
+          _buildControlButton(
+            _isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
+            _isScreenSharing ? 'إيقاف المشاركة' : 'مشاركة الشاشة',
+            _toggleScreenShare,
+            isActive: _isBroadcasting,
+          ),
+          _buildControlButton(
+            Icons.edit,
+            _isWhiteboardActive ? 'إخفاء السبورة' : 'عرض السبورة',
+            _toggleWhiteboard,
+            isActive: _isBroadcasting,
+          ),
+          _buildControlButton(
+            Icons.pan_tool,
+            'طلبات المداخلة (${_speakRequests.length})',
+            _showSpeakRequests,
+            isActive: true,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildControlButton(IconData icon, String label, VoidCallback onPressed) {
+  Widget _buildControlButton(IconData icon, String label, VoidCallback onPressed, {bool isActive = true}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(icon: Icon(icon), onPressed: onPressed, iconSize: 30),
-        Text(label),
+        IconButton(
+          icon: Icon(icon),
+          onPressed: isActive ? onPressed : null,
+          iconSize: 30,
+          color: isActive ? Theme.of(context).primaryColor : Colors.grey,
+        ),
+        Text(label, style: TextStyle(color: isActive ? Colors.black : Colors.grey)),
       ],
     );
   }

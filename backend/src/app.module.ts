@@ -30,6 +30,7 @@ import { ClassroomModule } from './classroom/classroom.module';
     UsersModule,
     ClassesModule,
     ClassroomModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
