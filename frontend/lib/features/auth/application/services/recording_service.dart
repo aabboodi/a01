@@ -38,8 +38,19 @@ class RecordingService {
       },
     );
 
-    if (response.statusCode != 201) {
+    if (response.statusCode != 200) { // Should be 200 for update
       throw Exception('Failed to stop recording.');
+    }
+  }
+
+  Future<void> uploadRecording(String recordingId, String filePath) async {
+    final token = await _getAccessToken();
+    var request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/recordings/$recordingId/upload'));
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath));
+    var res = await request.send();
+    if (res.statusCode != 201) {
+      throw Exception('Failed to upload recording.');
     }
   }
 }

@@ -29,10 +29,6 @@ class ClassroomService {
   });
 
   void connectAndJoin(String classId, String userId, String fullName) {
-    required this.onPermissionToSpeakReceived, // For student
-  });
-
-  void connectAndJoin(String classId) {
     socket = IO.io('http://10.0.2.2:3000', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
@@ -45,7 +41,6 @@ class ClassroomService {
         'userId': userId,
         'fullName': fullName,
       });
-      socket.emit('join-room', classId);
     });
 
     socket.onDisconnect((_) => print('Disconnected from signaling server'));

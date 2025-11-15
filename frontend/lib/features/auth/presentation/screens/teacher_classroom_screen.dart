@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart'; // Import chat service
+import 'package:frontend/features/auth/application/services/user_service.dart';
+import 'package.frontend/features/auth/application/services/recording_service.dart';
+import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
+import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
+import 'package:shared_preferences/shared_preferences.dart'; // To get token
+import 'package:url_launcher/url_launcher.dart';
 import 'package.frontend/features/auth/application/services/user_service.dart';
 import 'package.frontend/features/auth/application/services/recording_service.dart';
 import 'package.frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
@@ -15,12 +21,16 @@ class ChatMessage {
   final String senderId;
   final bool isLocal;
   final String authorName;
+  final bool isSystemMessage;
+  final String? recordingUrl;
 
   ChatMessage({
     required this.message,
     required this.senderId,
     required this.isLocal,
     required this.authorName,
+    this.isSystemMessage = false,
+    this.recordingUrl,
   });
 }
 
@@ -70,6 +80,8 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   // Recording state
   bool _isRecording = false;
   String? _currentRecordingId;
+  MediaRecorder? _mediaRecorder;
+  String? _recordedFilePath;
 
   // Services
   final ApiChatService _apiChatService = ApiChatService();
@@ -118,6 +130,18 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   Future<void> _loadChatHistory() async {
     try {
       final history = await _apiChatService.getChatHistory(widget.classData['class_id']);
+      final historicalMessages = history.map((msg) {
+        final isSystem = msg['user']?['role'] == 'admin';
+        final url = isSystem ? _extractUrl(msg['message']) : null;
+        return ChatMessage(
+          message: msg['message'],
+          senderId: msg['user']?['user_id'] ?? 'system',
+          isLocal: msg['user']?['user_id'] == _userId,
+          authorName: isSystem ? 'System' : (msg['user']?['full_name'] ?? 'Unknown'),
+          isSystemMessage: isSystem,
+          recordingUrl: url,
+        );
+      }).toList();
       final historicalMessages = history.map((msg) => ChatMessage(
         message: msg['message'],
         senderId: msg['user']?['user_id'] ?? 'unknown',
@@ -143,11 +167,16 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       },
       onChatMessageReceived: (data) {
         if (mounted) {
+          final isSystem = data['user']?['role'] == 'admin';
+          final url = isSystem ? _extractUrl(data['message']) : null;
           setState(() {
             _chatMessages.add(ChatMessage(
               message: data['message'],
               senderId: data['senderId'],
               isLocal: data['user']['user_id'] == _userId,
+              authorName: isSystem ? 'System' : data['user']['full_name'],
+              isSystemMessage: isSystem,
+              recordingUrl: url,
               authorName: data['user']['full_name'],
             ));
           });
@@ -255,6 +284,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     _peerConnection?.close();
     _studentConnections.forEach((key, value) => value.close());
     _studentRenderers.forEach((key, value) => value.dispose());
+    _mediaRecorder?.dispose();
     _classroomService.dispose();
     _chatController.dispose();
     _scrollController.dispose();
@@ -339,6 +369,19 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   Future<void> _toggleRecording() async {
     if (_isRecording) {
       // Stop recording
+      if (_mediaRecorder != null && _currentRecordingId != null) {
+        try {
+          final path = await _mediaRecorder!.stop();
+          await _recordingService.stopRecording(_currentRecordingId!);
+
+          setState(() {
+            _isRecording = false;
+            _recordedFilePath = path;
+          });
+
+          // Upload the file
+          await _recordingService.uploadRecording(_currentRecordingId!, path);
+
       if (_currentRecordingId != null) {
         try {
           await _recordingService.stopRecording(_currentRecordingId!);
@@ -352,6 +395,65 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
       }
     } else {
       // Start recording
+      if (_localStream != null) {
+        try {
+          final recording = await _recordingService.startRecording(widget.classData['class_id']);
+          _mediaRecorder = MediaRecorder();
+          await _mediaRecorder!.start(_localStream!);
+
+          setState(() {
+            _isRecording = true;
+            _currentRecordingId = recording['recording_id'];
+          });
+        } catch (e) {
+          print("Failed to start recording: $e");
+        }
+      }
+    }
+  }
+
+  // --- Data Fetching ---
+
+  Future<void> _fetchAllStudents() async {
+    try {
+      // Assuming you have a method in your service to get students by class.
+      // This might need to be created.
+      final students = await _apiUserService.getUsersByClass(widget.classData['class_id']);
+      if (mounted) {
+        setState(() {
+          _allStudents = students;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch students for class: $e");
+    }
+  }
+
+  // --- UI Actions ---
+
+  void _showAttendance() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ListView.builder(
+          itemCount: _allStudents.length,
+          itemBuilder: (context, index) {
+            final student = _allStudents[index];
+            final isPresent = _presentStudentIds.contains(student['user_id']);
+            return ListTile(
+              title: Text(student['full_name']),
+              trailing: Icon(
+                Icons.circle,
+                color: isPresent ? Colors.green : Colors.red,
+                size: 16,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
       try {
         final recording = await _recordingService.startRecording(widget.classData['class_id']);
         setState(() {
@@ -441,7 +543,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
         _isBroadcasting = true;
         _startTimer();
       });
-      setState(() => _isBroadcasting = true);
     } catch (e) {
       print('Error starting broadcast: $e');
     }
@@ -591,6 +692,19 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
     );
   }
 
+  String? _extractUrl(String message) {
+    final regex = RegExp(r'(uploads/recordings/.*)');
+    final match = regex.firstMatch(message);
+    return match != null ? 'http://10.0.2.2:3000/${match.group(1)}' : null;
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      throw Exception('Could not launch $url');
+    }
+  }
+
   Widget _buildChatView() {
     return Column(
       children: [
@@ -600,6 +714,20 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
             itemCount: _chatMessages.length,
             itemBuilder: (context, index) {
               final msg = _chatMessages[index];
+              if (msg.isSystemMessage && msg.recordingUrl != null) {
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.videocam),
+                    title: const Text('New Recording Available'),
+                    subtitle: const Text('A new session recording is ready for download.'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.download),
+                      onPressed: () => _launchUrl(msg.recordingUrl!),
+                    ),
+                  ),
+                );
+              }
               return ListTile(
                 title: Text(msg.authorName, style: TextStyle(fontWeight: FontWeight.bold, color: msg.isLocal ? Colors.blue : Colors.black)),
                 subtitle: Text(msg.message),

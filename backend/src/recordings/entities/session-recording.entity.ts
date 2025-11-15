@@ -24,6 +24,8 @@ export class SessionRecording {
   @Column({ type: 'datetime', nullable: true })
   end_time: Date | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  file_path: string | null;
   // In the future, a field for the video file path would be added here
   // @Column({ type: 'varchar', length: 255, nullable: true })
   // file_path: string | null;

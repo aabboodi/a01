@@ -5,6 +5,7 @@ import 'package:frontend/features/auth/application/services/chat_service.dart';
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Data model for ChatMessage
 class ChatMessage {
@@ -12,12 +13,16 @@ class ChatMessage {
   final String senderId;
   final bool isLocal;
   final String authorName;
+  final bool isSystemMessage;
+  final String? recordingUrl;
 
   ChatMessage({
     required this.message,
     required this.senderId,
     required this.isLocal,
     required this.authorName,
+    this.isSystemMessage = false,
+    this.recordingUrl,
   });
 }
 
@@ -86,6 +91,18 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   Future<void> _loadChatHistory() async {
     try {
       final history = await _apiChatService.getChatHistory(widget.classData['class_id']);
+      final historicalMessages = history.map((msg) {
+        final isSystem = msg['user']?['role'] == 'admin';
+        final url = isSystem ? _extractUrl(msg['message']) : null;
+        return ChatMessage(
+          message: msg['message'],
+          senderId: msg['user']?['user_id'] ?? 'system',
+          isLocal: msg['user']?['user_id'] == _userId,
+          authorName: isSystem ? 'System' : (msg['user']?['full_name'] ?? 'Unknown'),
+          isSystemMessage: isSystem,
+          recordingUrl: url,
+        );
+      }).toList();
       final historicalMessages = history.map((msg) => ChatMessage(
         message: msg['message'],
         senderId: msg['user']?['user_id'] ?? 'unknown',
@@ -111,11 +128,16 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
       },
       onChatMessageReceived: (data) {
         if (mounted) {
+          final isSystem = data['user']?['role'] == 'admin';
+          final url = isSystem ? _extractUrl(data['message']) : null;
           setState(() {
             _chatMessages.add(ChatMessage(
               message: data['message'],
               senderId: data['senderId'],
               isLocal: data['user']['user_id'] == _userId,
+              authorName: isSystem ? 'System' : data['user']['full_name'],
+              isSystemMessage: isSystem,
+              recordingUrl: url,
               authorName: data['user']['full_name'],
             ));
           });
@@ -298,6 +320,19 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     );
   }
 
+  String? _extractUrl(String message) {
+    final regex = RegExp(r'(uploads/recordings/.*)');
+    final match = regex.firstMatch(message);
+    return match != null ? 'http://10.0.2.2:3000/${match.group(1)}' : null;
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      throw Exception('Could not launch $url');
+    }
+  }
+
   Widget _buildChatView() {
     return Column(
       children: [
@@ -307,6 +342,20 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
             itemCount: _chatMessages.length,
             itemBuilder: (context, index) {
               final msg = _chatMessages[index];
+              if (msg.isSystemMessage && msg.recordingUrl != null) {
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.videocam),
+                    title: const Text('New Recording Available'),
+                    subtitle: const Text('A new session recording is ready for download.'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.download),
+                      onPressed: () => _launchUrl(msg.recordingUrl!),
+                    ),
+                  ),
+                );
+              }
               return ListTile(
                 title: Text(msg.authorName, style: TextStyle(fontWeight: FontWeight.bold, color: msg.isLocal ? Colors.blue : Colors.black)),
                 subtitle: Text(msg.message),
