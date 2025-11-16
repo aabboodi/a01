@@ -30,6 +30,9 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phone_number: string;
+
   @CreateDateColumn({
     type: 'datetime', // Changed from 'timestamptz' to 'datetime'
     default: () => 'CURRENT_TIMESTAMP',

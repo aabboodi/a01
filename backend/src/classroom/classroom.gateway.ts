@@ -6,6 +6,11 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { ChatService } from '../chat/chat.service';
+import { UsersService } from '../users/users.service';
+import { ClassesService } from '../classes/classes.service';
+import { MediasoupService } from '../mediasoup/mediasoup.service';
+import { Router } from 'mediasoup/node/lib/Router';
 
 @WebSocketGateway({
   cors: {
@@ -16,72 +21,273 @@ export class ClassroomGateway {
   @WebSocketServer()
   server: Server;
 
+  // classId -> (userId -> { fullName })
+  private readonly attendance = new Map<string, Map<string, { fullName: string }>>();
+  // clientId -> { classId, userId }
+  private readonly clients = new Map<string, { classId: string; userId: string }>();
+  private readonly rooms = new Map<string, Router>();
+  private readonly transports = new Map<string, any>(); // Store transports by id
+  private readonly producers = new Map<string, any>(); // Store producers by id
+
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly usersService: UsersService,
+    private readonly classesService: ClassesService,
+    private readonly attendanceService: AttendanceService,
+    private readonly mediasoupService: MediasoupService,
+  ) {}
+
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
+    const clientInfo = this.clients.get(client.id);
+    if (clientInfo) {
+      const { classId, userId } = clientInfo;
+      const classAttendance = this.attendance.get(classId);
+      if (classAttendance) {
+        classAttendance.delete(userId);
+        this.clients.delete(client.id);
+
+        // Notify room that user has left
+        this.server.to(classId).emit('user-left', { userId });
+
+        // Record event in DB
+        const user = await this.usersService.findOneById(userId);
+        const classEntity = await this.classesService.findOne(classId);
+        if (user && classEntity) {
+          this.attendanceService.recordEvent(user, classEntity, 'left' as any);
+        }
+      }
+    }
   }
 
   @SubscribeMessage('join-room')
   handleJoinRoom(
-    @MessageBody() classId: string,
+    @MessageBody() data: { classId: string; userId: string; fullName: string },
     @ConnectedSocket() client: Socket,
   ): void {
-    console.log(`Client ${client.id} is joining room ${classId}`);
-    client.join(classId);
-    // Acknowledge that the client has joined the room
-    client.emit('joined-room', `Successfully joined room ${classId}`);
+    console.log(`Client ${client.id} (${data.fullName}) is joining room ${data.classId}`);
+    client.join(data.classId);
+
+    // Track attendance
+    if (!this.attendance.has(data.classId)) {
+      this.attendance.set(data.classId, new Map());
+    }
+    this.attendance.get(data.classId)!.set(data.userId, { fullName: data.fullName });
+    this.clients.set(client.id, { classId: data.classId, userId: data.userId });
+
+    // Record event in DB
+    const user = await this.usersService.findOneById(data.userId);
+    const classEntity = await this.classesService.findOne(data.classId);
+    if (user && classEntity) {
+      this.attendanceService.recordEvent(user, classEntity, 'joined' as any);
+    }
+
+    // Notify the room that a new user has joined
+    this.server.to(data.classId).emit('user-joined', { userId: data.userId, fullName: data.fullName });
+
+    // Send the current attendance list to the newly joined client
+    const currentAttendance = Array.from(this.attendance.get(data.classId)!.keys());
+    client.emit('current-attendance', currentAttendance);
+
+    // Create a mediasoup router for the room if it doesn't exist
+    if (!this.rooms.has(data.classId)) {
+      const worker = this.mediasoupService.getWorker();
+      const router = await worker.createRouter({
+        mediaCodecs: [
+          // Define the codecs you want to support
+          {
+            kind: 'audio',
+            mimeType: 'audio/opus',
+            clockRate: 48000,
+            channels: 2,
+          },
+          {
+            kind: 'video',
+            mimeType: 'video/VP8',
+            clockRate: 90000,
+            parameters: {
+              'x-google-start-bitrate': 1000,
+            },
+          },
+        ],
+      });
+      this.rooms.set(data.classId, router);
+      console.log(`Mediasoup router created for room ${data.classId}`);
+    }
   }
 
   @SubscribeMessage('chat-message')
-  handleChatMessage(
-    @MessageBody() data: { classId: string; message: string },
+  async handleChatMessage(
+    @MessageBody() data: { classId: string; message: string; userId: string },
     @ConnectedSocket() client: Socket,
-  ): void {
-    // Broadcast the message to all other clients in the same room
-    client.to(data.classId).emit('chat-message', {
-      message: data.message,
-      senderId: client.id, // Identify the sender
-    });
+  ): Promise<void> {
+    const user = await this.usersService.findById(data.userId);
+    const classEntity = await this.classesService.findOne(data.classId);
+
+    if (user && classEntity) {
+      const chatMessage = await this.chatService.createMessage(
+        data.message,
+        user,
+        classEntity,
+      );
+
+      // Broadcast the saved message, now including user info
+      this.server.to(data.classId).emit('chat-message', {
+        message: chatMessage.message,
+        senderId: client.id,
+        user: {
+          user_id: user.user_id,
+          full_name: user.full_name,
+        }
+      });
+    } else {
+      console.error(`User or Class not found for chat message:`, data);
+    }
   }
 
-  // --- WebRTC Signaling Handlers ---
+  // --- Mediasoup Signaling Handlers ---
 
-  @SubscribeMessage('webrtc-offer')
-  handleWebrtcOffer(
-    @MessageBody() data: { classId: string; offer: any },
+  @SubscribeMessage('get-router-rtp-capabilities')
+  handleGetRouterRtpCapabilities(
+    @MessageBody() data: { classId: string },
     @ConnectedSocket() client: Socket,
-  ): void {
-    // Broadcast the offer to all other clients in the room
-    client.to(data.classId).emit('webrtc-offer', {
-      offer: data.offer,
-      senderId: client.id,
-    });
+  ) {
+    const router = this.rooms.get(data.classId);
+    if (router) {
+      client.emit('router-rtp-capabilities', router.rtpCapabilities);
+    }
   }
 
-  @SubscribeMessage('webrtc-answer')
-  handleWebrtcAnswer(
-    @MessageBody() data: { classId: string; answer: any },
+  @SubscribeMessage('create-transport')
+  async handleCreateTransport(
+    @MessageBody() data: { classId: string, isProducer: boolean },
     @ConnectedSocket() client: Socket,
-  ): void {
-    // Broadcast the answer to all other clients in the room
-    client.to(data.classId).emit('webrtc-answer', {
-      answer: data.answer,
-      senderId: client.id,
-    });
+  ) {
+    try {
+      const router = this.rooms.get(data.classId);
+      if (!router) {
+        throw new Error(`Router for class ${data.classId} not found`);
+      }
+
+      const transport = await router.createWebRtcTransport({
+        listenIps: [{ ip: '0.0.0.0', announcedIp: '127.0.0.1' }], // Replace with public IP in production
+        enableUdp: true,
+        enableTcp: true,
+        preferUdp: true,
+      });
+
+      // Store the transport server-side
+      this.transports.set(transport.id, transport);
+
+      client.emit('transport-created', {
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters,
+      });
+
+    } catch (error) {
+      console.error('Error creating transport:', error);
+      client.emit('error', 'Error creating transport');
+    }
   }
 
-  @SubscribeMessage('webrtc-ice-candidate')
-  handleWebrtcIceCandidate(
-    @MessageBody() data: { classId: string; candidate: any },
+  @SubscribeMessage('connect-transport')
+  async handleConnectTransport(
+    @MessageBody() data: { classId: string; transportId: string; dtlsParameters: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      await transport.connect({ dtlsParameters: data.dtlsParameters });
+      client.emit('transport-connected');
+    } catch (error) {
+      console.error('Error connecting transport:', error);
+      client.emit('error', 'Error connecting transport');
+    }
+  }
+
+  @SubscribeMessage('produce')
+  async handleProduce(
+    @MessageBody() data: { classId: string; transportId: string; kind: any; rtpParameters: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      const producer = await transport.produce({
+        kind: data.kind,
+        rtpParameters: data.rtpParameters,
+      });
+
+      if (producer.kind === 'audio') {
+        producer.setPriority(10); // High priority for audio
+      }
+
+      this.producers.set(producer.id, producer);
+
+      client.emit('produced', { id: producer.id });
+
+      // Notify other clients in the room about the new producer
+      client.to(data.classId).emit('new-producer', { producerId: producer.id });
+
+    } catch (error) {
+      console.error('Error producing:', error);
+      client.emit('error', 'Error producing');
+    }
+  }
+
+  @SubscribeMessage('consume')
+  async handleConsume(
+    @MessageBody() data: { classId: string; transportId: string; producerId: string; rtpCapabilities: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const router = this.rooms.get(data.classId);
+      if (!router || !router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities })) {
+        throw new Error('Cannot consume');
+      }
+      const transport = this.transports.get(data.transportId);
+      if (!transport) {
+        throw new Error(`Transport with id ${data.transportId} not found`);
+      }
+      const consumer = await transport.consume({
+        producerId: data.producerId,
+        rtpCapabilities: data.rtpCapabilities,
+        paused: true, // Start paused
+      });
+
+      // Store consumer server-side, and associate with client
+
+      client.emit('consumed', {
+        id: consumer.id,
+        producerId: consumer.producerId,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+      });
+    } catch (error) {
+      console.error('Error consuming:', error);
+      client.emit('error', 'Error consuming');
+    }
+  }
+
+  @SubscribeMessage('set-audio-mode')
+  handleSetAudioMode(
+    @MessageBody() data: { classId: string; isFreeMicMode: boolean },
     @ConnectedSocket() client: Socket,
   ): void {
-    // Broadcast the ICE candidate to all other clients in the room
-    client.to(data.classId).emit('webrtc-ice-candidate', {
-      candidate: data.candidate,
-      senderId: client.id,
+    // Broadcast the new audio mode to everyone else in the room
+    client.to(data.classId).emit('audio-mode-changed', {
+      isFreeMicMode: data.isFreeMicMode,
     });
   }
 
@@ -95,6 +301,41 @@ export class ClassroomGateway {
       studentId: data.studentId,
       studentName: data.studentName,
       socketId: client.id,
+    });
+  }
+
+  @SubscribeMessage('allow-to-speak')
+  handleAllowToSpeak(
+    @MessageBody() data: { studentSocketId: string },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Notify the specific student that they have permission to speak
+    this.server.to(data.studentSocketId).emit('permission-to-speak', {
+      teacherSocketId: client.id,
+    });
+  }
+
+  // --- Whiteboard Drawing Handler ---
+
+  @SubscribeMessage('session-state-changed')
+  handleSessionStateChanged(
+    @MessageBody() data: { classId: string; isPaused: boolean },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    client.to(data.classId).emit('session-state-changed', {
+      isPaused: data.isPaused,
+    });
+  }
+
+  @SubscribeMessage('draw-event')
+  handleDrawEvent(
+    @MessageBody() data: { classId: string; event: any },
+    @ConnectedSocket() client: Socket,
+  ): void {
+    // Broadcast the drawing event to all other clients in the same room
+    client.to(data.classId).emit('draw-event', {
+      event: data.event,
+      senderId: client.id,
     });
   }
 }

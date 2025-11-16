@@ -4,6 +4,7 @@ import 'package:frontend/features/auth/presentation/screens/manage_students_scre
 import 'package:frontend/features/auth/presentation/screens/manage_classes_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/archive_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
+import 'package:frontend/features/auth/presentation/screens/targeted_env_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -78,6 +79,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               leading: const Icon(Icons.archive),
               title: const Text('الأرشيف'),
               onTap: () => _navigateTo(const ArchiveScreen()),
+            ),
+            ListTile(
+              leading: const Icon(Icons.campaign),
+              title: const Text('البيئة المستهدفة'),
+              onTap: () => _navigateTo(const TargetedEnvScreen()),
             ),
           ],
         ),

@@ -1,20 +1,29 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
   final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
 
   Future<List<dynamic>> getUsersByRole(String role) async {
-    final url = Uri.parse('$_baseUrl/users?role=$role');
+    final cacheKey = 'cached_users_by_role_$role';
     try {
-      final response = await http.get(url);
+      final response = await http.get(Uri.parse('$_baseUrl/users?role=$role'));
       if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(cacheKey, response.body);
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to load users');
+        throw Exception('Failed to load users from network');
       }
     } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+      final prefs = await SharedPreferences.getInstance();
+      final cachedData = prefs.getString(cacheKey);
+      if (cachedData != null) {
+        return json.decode(cachedData);
+      } else {
+        throw Exception('A network error occurred and no cached data is available.');
+      }
     }
   }
 
@@ -62,6 +71,20 @@ class UserService {
         return json.decode(response.body);
       } else {
         throw Exception('User not found.');
+      }
+    } catch (e) {
+      throw Exception('A network error occurred: ${e.toString()}');
+    }
+  }
+
+  Future<List<dynamic>> getUsersByClass(String classId) async {
+    final url = Uri.parse('$_baseUrl/classes/$classId/students');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load students for class');
       }
     } catch (e) {
       throw Exception('A network error occurred: ${e.toString()}');

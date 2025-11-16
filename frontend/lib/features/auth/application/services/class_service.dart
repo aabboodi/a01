@@ -1,35 +1,53 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ClassService {
   final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
 
   Future<List<dynamic>> getAllClasses() async {
-    // ... (getAllClasses implementation remains the same)
-        final url = Uri.parse('$_baseUrl/classes');
+    const cacheKey = 'cached_all_classes';
     try {
-      final response = await http.get(url);
+      final response = await http.get(Uri.parse('$_baseUrl/classes'));
       if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(cacheKey, response.body);
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to load classes');
+        throw Exception('Failed to load classes from network');
       }
     } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+      // Network error, try to load from cache
+      final prefs = await SharedPreferences.getInstance();
+      final cachedData = prefs.getString(cacheKey);
+      if (cachedData != null) {
+        return json.decode(cachedData);
+      } else {
+        throw Exception('A network error occurred and no cached data is available.');
+      }
     }
   }
 
   Future<List<dynamic>> getClassesByTeacher(String teacherId) async {
-    final url = Uri.parse('$_baseUrl/classes?teacherId=$teacherId');
+    final cacheKey = 'cached_teacher_classes_$teacherId';
     try {
-      final response = await http.get(url);
+      final response = await http.get(Uri.parse('$_baseUrl/classes?teacherId=$teacherId'));
       if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(cacheKey, response.body);
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to load classes for teacher');
+        throw Exception('Failed to load classes for teacher from network');
       }
     } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+      // Network error, try to load from cache
+      final prefs = await SharedPreferences.getInstance();
+      final cachedData = prefs.getString(cacheKey);
+      if (cachedData != null) {
+        return json.decode(cachedData);
+      } else {
+        throw Exception('A network error occurred and no cached data is available.');
+      }
     }
   }
 

@@ -187,10 +187,15 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
           DataColumn(label: Text('إجراء')),
         ],
         rows: _filteredStudents.map((student) {
+          final createdAt = DateTime.tryParse(student['created_at'] ?? '');
+          final isNew = createdAt != null && DateTime.now().difference(createdAt).inDays <= 30;
+          final textColor = isNew ? Colors.green : Colors.red;
+          final style = TextStyle(color: textColor);
+
           return DataRow(cells: [
-            DataCell(Text(student['full_name'])),
-            DataCell(Text(student['login_code'])),
-            DataCell(Text(student['phone_number'] ?? 'N/A')),
+            DataCell(Text(student['full_name'], style: style)),
+            DataCell(Text(student['login_code'], style: style)),
+            DataCell(Text(student['phone_number'] ?? 'N/A', style: style)),
             DataCell(IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: () => _deleteStudent(student['user_id']),
