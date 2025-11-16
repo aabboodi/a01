@@ -36,7 +36,7 @@ dependencies:
   firebase_core: ^2.32.0
   firebase_messaging: ^14.9.4
   video_player: ^2.8.6
-  mediasfu_mediasoup_client: ^1.0.8
+  #mediasfu_mediasoup_client: ^1.0.8
 
   cupertino_icons: ^1.0.2
 

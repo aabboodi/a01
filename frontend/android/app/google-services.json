@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "867353676396",
+    "project_id": "the-first-institute",
+    "storage_bucket": "the-first-institute.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:867353676396:android:3d054f6666b7ebb5cf2649",
+        "android_client_info": {
+          "package_name": "com.thefirstinstitute.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCIArWqrhU7ryFNlxI8S4aE4FAmcJ_ZxOI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
