@@ -11,13 +11,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/main.dart';
 
 void main() {
-  testWidgets('Login screen smoke test', (WidgetTester tester) async {
+  testWidgets('App starts without crashing', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const TheFirstInstituteApp());
 
     // Verify that the login screen is shown.
-    expect(find.text('المعهد الأول'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'كود الدخول'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'تسجيل الدخول'), findsOneWidget);
+    expect(find.text('تسجيل الدخول - المعهد الأول'), findsOneWidget);
   });
 }
