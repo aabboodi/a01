@@ -17,22 +17,54 @@ dependencies:
   # For WebSocket communication with the signaling server
   socket_io_client: ^2.0.3
 
-  # For WebRTC functionality (video, audio)
-  flutter_webrtc: ^0.9.48
-
   # For simple key-value storage
   shared_preferences: ^2.2.3
 
   # For decoding JWTs to extract payload
   jwt_decoder: ^2.0.1
 
+  # For launching URLs
+  url_launcher: ^6.2.6
+
+  # For handling permissions
+  permission_handler: ^11.0.1
+
+  # For Firebase services
+  firebase_core: ^2.32.0
+  # firebase_messaging: ^14.7.10 # Temporarily removed to resolve build issues
+  video_player: ^2.8.6
+
+  # For WebRTC functionality (video, audio)
+  flutter_webrtc: ^1.2.0
+  mediasfu_mediasoup_client: ^0.1.0
+
   cupertino_icons: ^1.0.2
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
 
   flutter_lints: ^3.0.0
+  flutter_native_splash: ^2.4.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/branding/splash.png
+  android: true
+  ios: true
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/branding/icon.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/branding/

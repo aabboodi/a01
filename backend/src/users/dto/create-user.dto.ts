@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsEnum, Length } from 'class-validator';
+import { IsNotEmpty, IsString, IsEnum, IsOptional, IsPhoneNumber } from 'class-validator';
 import { UserRole } from '../entities/user.entity';
 
 export class CreateUserDto {
