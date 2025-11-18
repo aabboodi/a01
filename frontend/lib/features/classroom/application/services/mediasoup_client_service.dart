@@ -1,93 +1,72 @@
 import 'package:mediasfu_mediasoup_client/mediasfu_mediasoup_client.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'dart:async';
 
 class MediasoupClientService {
-  late Device _device;
-  late IO.Socket _socket;
+  late Device device;
+  IO.Socket? _socket;
   SendTransport? sendTransport;
   RecvTransport? recvTransport;
   Producer? _videoProducer;
   Producer? _audioProducer;
 
-  Future<void> initialize(String classId, IO.Socket socket) async {
+  void initialize(String classId, IO.Socket socket) {
     _socket = socket;
-    _device = Device();
-
-    // Get Router RTP Capabilities from the server
-    _socket.emit('get-router-rtp-capabilities', {'classId': classId});
-
-    _socket.on('router-rtp-capabilities', (data) async {
-      final routerRtpCapabilities = RtpCapabilities.fromMap(data);
-      await _device.load(routerRtpCapabilities: routerRtpCapabilities);
-    });
+    device = Device();
   }
 
-  Device get device => _device;
+  Future<void> loadDevice(dynamic routerRtpCapabilities) async {
+    await device.load(routerRtpCapabilities: routerRtpCapabilities);
+  }
 
   Future<void> createSendTransport(IO.Socket socket, String classId) async {
-    final completer = Completer();
-    _socket.emit('create-transport', {'classId': classId, 'isProducer': true});
-
-    _socket.on('transport-created', (data) async {
+    final completer = Completer<void>();
+    socket.emitWithAck('create-transport', {'classId': classId, 'isProducer': true}, ack: (data) async {
       sendTransport = device.createSendTransport(
         id: data['id'],
-        iceParameters: IceParameters.fromMap(data['iceParameters']),
-        iceCandidates: (data['iceCandidates'] as List<dynamic>).map((e) => IceCandidate.fromMap(e)).toList(),
-        dtlsParameters: DtlsParameters.fromMap(data['dtlsParameters']),
+        iceParameters: data['iceParameters'],
+        iceCandidates: List<IceCandidate>.from(data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
+        dtlsParameters: data['dtlsParameters'],
       );
 
-      sendTransport!.on('connect', (options) {
-        _socket.emit('connect-transport', {
+      sendTransport!.on('connect', (dtlsParameters, callback, errback) {
+        socket.emitWithAck('connect-transport', {
           'classId': classId,
           'transportId': sendTransport!.id,
-          'dtlsParameters': options.dtlsParameters.toMap(),
-        });
+          'dtlsParameters': dtlsParameters.toMap(),
+        }, ack: (_) => callback());
       });
 
-      sendTransport!.on('produce', (options) async {
-        final result = await socket.call('produce', {
+      sendTransport!.on('produce', (kind, rtpParameters, callback, errback) async {
+        socket.emitWithAck('produce', {
           'classId': classId,
           'transportId': sendTransport!.id,
-          'kind': options.kind,
-          'rtpParameters': options.rtpParameters.toMap(),
-        });
-        return result['id'];
+          'kind': kind,
+          'rtpParameters': rtpParameters,
+        }, ack: (producerId) => callback(producerId));
       });
 
       completer.complete();
-});
-
-recvTransport!.on('connectionstatechange', (state) {
-if (state == 'failed' || state == 'disconnected') {
-// Pause video consumer, keep audio consumer running
-} else if (state == 'connected') {
-// Resume video consumer
-}
-});
-
-completer.complete();
     });
     return completer.future;
   }
 
   Future<void> createRecvTransport(IO.Socket socket, String classId) async {
-    final completer = Completer();
-    _socket.emit('create-transport', {'classId': classId, 'isProducer': false});
-
-    _socket.on('transport-created', (data) {
+    final completer = Completer<void>();
+    socket.emitWithAck('create-transport', {'classId': classId, 'isProducer': false}, ack: (data) {
       recvTransport = device.createRecvTransport(
         id: data['id'],
-        iceParameters: IceParameters.fromMap(data['iceParameters']),
-        iceCandidates: (data['iceCandidates'] as List<dynamic>).map((e) => IceCandidate.fromMap(e)).toList(),
-        dtlsParameters: DtlsParameters.fromMap(data['dtlsParameters']),
+        iceParameters: data['iceParameters'],
+        iceCandidates: List<IceCandidate>.from(data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
+        dtlsParameters: data['dtlsParameters'],
       );
 
-      recvTransport!.on('connect', (options) {
-        _socket.emit('connect-transport', {
+      recvTransport!.on('connect', (dtlsParameters, callback, errback) {
+        socket.emitWithAck('connect-transport', {
           'classId': classId,
           'transportId': recvTransport!.id,
-          'dtlsParameters': options.dtlsParameters.toMap(),
-        });
+          'dtlsParameters': dtlsParameters.toMap(),
+        }, ack: (_) => callback());
       });
 
       completer.complete();
@@ -101,20 +80,21 @@ completer.complete();
     required String producerId,
     required RtpCapabilities rtpCapabilities,
   }) async {
-    final result = await socket.call('consume', {
+    final completer = Completer<Consumer>();
+    socket.emitWithAck('consume', {
       'transportId': transport.id,
       'producerId': producerId,
       'rtpCapabilities': rtpCapabilities.toMap(),
+    }, ack: (data) async {
+      final consumer = await transport.consume(
+        id: data['id'],
+        producerId: data['producerId'],
+        kind: data['kind'],
+        rtpParameters: RtpParameters.fromMap(data['rtpParameters']),
+      );
+      completer.complete(consumer);
     });
-
-    final consumer = await transport.consume(
-      id: result['id'],
-      producerId: result['producerId'],
-      kind: result['kind'],
-      rtpParameters: RtpParameters.fromMap(result['rtpParameters']),
-    );
-
-    return consumer;
+    return completer.future;
   }
 
   Future<Producer> produce({
@@ -127,7 +107,21 @@ completer.complete();
       track: track,
       encodings: encodings,
     );
-
+    if(track.kind == 'video'){
+      _videoProducer = producer;
+    } else {
+      _audioProducer = producer;
+    }
     return producer;
+  }
+
+  Producer? findProducerByTrackKind(String kind) {
+    if (kind == 'video') {
+      return _videoProducer;
+    }
+    if (kind == 'audio') {
+      return _audioProducer;
+    }
+    return null;
   }
 }

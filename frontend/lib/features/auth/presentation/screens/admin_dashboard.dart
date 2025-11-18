@@ -4,6 +4,7 @@ import 'package:frontend/features/auth/presentation/screens/manage_students_scre
 import 'package:frontend/features/auth/presentation/screens/manage_classes_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/archive_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
+import 'package:frontend/features/auth/application/services/class_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -13,7 +14,6 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  // This will hold the main content of the dashboard
   Widget _selectedScreen = const Center(child: Text('الرجاء تحديد قسم من القائمة'));
 
   void _navigateTo(Widget screen) {
@@ -26,7 +26,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void _logout() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false, // Remove all previous routes
+      (route) => false,
     );
   }
 
@@ -77,12 +77,51 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ListTile(
               leading: const Icon(Icons.archive),
               title: const Text('الأرشيف'),
-              onTap: () => _navigateTo(const ArchiveScreen()),
+              onTap: () => _navigateTo(const _ClassSelectionScreen()),
             ),
           ],
         ),
       ),
       body: _selectedScreen,
+    );
+  }
+}
+
+class _ClassSelectionScreen extends StatelessWidget {
+  const _ClassSelectionScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Select a Class to View Archive')),
+      body: FutureBuilder<List<dynamic>>(
+        future: ClassService().getAllClasses(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final classes = snapshot.data ?? [];
+          return ListView.builder(
+            itemCount: classes.length,
+            itemBuilder: (context, index) {
+              final classData = classes[index];
+              return ListTile(
+                title: Text(classData['class_name']),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ArchiveScreen(classData: classData),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

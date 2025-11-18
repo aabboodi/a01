@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
         page = TeacherDashboard(userData: userData);
         break;
       case 'student':
-        page = const StudentDashboard();
+        page = StudentDashboard(userData: userData);
         break;
       default:
         _showError('دور المستخدم غير معروف: $role');

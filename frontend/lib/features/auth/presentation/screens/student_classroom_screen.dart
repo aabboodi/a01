@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package.frontend/features/auth/application/services/classroom_service.dart';
+import 'package:frontend/features/auth/application/services/classroom_service.dart';
 import 'package:frontend/features/auth/application/services/chat_service.dart';
 import 'package:frontend/features/classroom/application/services/mediasoup_client_service.dart';
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-// Data model for ChatMessage
+// Data model for ChatMessage (assuming it's defined elsewhere or here)
 class ChatMessage {
   final String message;
   final String senderId;
@@ -46,31 +47,20 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   final MediasoupClientService _mediasoupClientService = MediasoupClientService();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
 
-  // State variables
   String _serverMessage = '';
   bool _requestSent = false;
   bool _isWhiteboardVisible = true;
   String? _userId;
-  bool _isFreeMicMode = false; // New state for audio mode
-  bool _isMicActive = false; // New state for mic status in free mode
-  MediaStream? _localAudioStream; // To hold the local audio stream
-  bool _isPaused = false; // New state for session pause
-ConnectionState _connectionState = ConnectionState.none;
+  bool _isFreeMicMode = false;
+  bool _isMicActive = false;
+  MediaStream? _localAudioStream;
+  bool _isPaused = false;
+  ConnectionState _connectionState = ConnectionState.none;
 
-  // Services
   final ApiChatService _apiChatService = ApiChatService();
-
-  // Chat state
   final List<ChatMessage> _chatMessages = [];
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
-  // WebRTC configuration
-  final Map<String, dynamic> _iceServers = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-    ]
-  };
 
   @override
   void initState() {
@@ -143,19 +133,15 @@ ConnectionState _connectionState = ConnectionState.none;
           _scrollToBottom();
         }
       },
-      onRequestToSpeakReceived: (data) {
-        // Student sends, doesn't receive this
-      },
+      onRequestToSpeakReceived: (data) {},
       onPermissionToSpeakReceived: (data) {
         print("Permission to speak received!");
-        _startAudioBroadcast(data['teacherSocketId']);
+        _startAudioBroadcast();
       },
-      // New listener for audio mode changes
       onAudioModeChanged: (data) {
         if (mounted) {
           setState(() {
             _isFreeMicMode = data['isFreeMicMode'];
-            // If mic becomes restricted, turn off the student's mic
             if (!_isFreeMicMode && _isMicActive) {
               _toggleMic();
             }
@@ -169,75 +155,50 @@ ConnectionState _connectionState = ConnectionState.none;
           });
         }
       },
-      onRequestToSpeakReceived: (data) {
-        // Student sends, doesn't receive this
-      },
-      onPermissionToSpeakReceived: (data) {
-        print("Permission to speak received!");
-        _startAudioBroadcast(data['teacherSocketId']);
-      },
-      // New listener for audio mode changes
-      onAudioModeChanged: (data) {
-        if (mounted) {
-          setState(() {
-            _isFreeMicMode = data['isFreeMicMode'];
-            // If mic becomes restricted, turn off the student's mic
-            if (!_isFreeMicMode && _isMicActive) {
-              _toggleMic();
-            }
-          });
-        }
-      },
-      onSessionStateChanged: (data) {
-        if (mounted) {
-          setState(() {
-            _isPaused = data['isPaused'];
-          });
-        }
-      },
+      onUserJoined: (data) {},
+      onUserLeft: (data) {},
+      onCurrentAttendanceReceived: (data) {},
     );
     _classroomService.connectAndJoin(
       widget.classData['class_id'],
       widget.userData['user_id'],
       widget.userData['full_name'],
     );
-    _classroomService.connectAndJoin(
-      widget.classData['class_id'],
-      widget.userData['user_id'],
-      widget.userData['full_name'],
-    );
-      _mediasoupClientService.initialize(widget.classData['class_id'], _classroomService.socket);
 
-      _classroomService.socket.on('new-producer', (data) {
-_startMediasoupConsumer(data['producerId']);
-      });
+    _mediasoupClientService.initialize(widget.classData['class_id'], _classroomService.socket);
 
-      _classroomService.socket.onConnect((_) => setState(() => _connectionState = ConnectionState.active));
-      _classroomService.socket.onConnecting((_) => setState(() => _connectionState = ConnectionState.waiting));
-      _classroomService.socket.onDisconnect((_) => setState(() => _connectionState = ConnectionState.none));
+    _classroomService.socket.on('new-producer', (data) {
+      _startMediasoupConsumer(data['producerId']);
+    });
+
+    _classroomService.socket.on('connect', (_) => setState(() => _connectionState = ConnectionState.active));
+    _classroomService.socket.on('connecting', (_) => setState(() => _connectionState = ConnectionState.waiting));
+    _classroomService.socket.on('disconnect', (_) => setState(() => _connectionState = ConnectionState.none));
   }
 
-Future<void> _startMediasoupConsumer(String producerId) async {
-try {
-await _mediasoupClientService.createRecvTransport(
-_classroomService.socket,
-widget.classData['class_id'],
-);
+  Future<void> _startMediasoupConsumer(String producerId) async {
+    try {
+      await _mediasoupClientService.createRecvTransport(
+        _classroomService.socket,
+        widget.classData['class_id'],
+      );
 
-final consumer = await _mediasoupClientService.consume(
-socket: _classroomService.socket,
-transport: _mediasoupClientService.recvTransport!,
-producerId: producerId,
-rtpCapabilities: _mediasoupClientService.device.rtpCapabilities,
-);
+      final consumer = await _mediasoupClientService.consume(
+        socket: _classroomService.socket,
+        transport: _mediasoupClientService.recvTransport!,
+        producerId: producerId,
+        rtpCapabilities: _mediasoupClientService.device.rtpCapabilities,
+      );
 
-if (consumer.track != null) {
-_remoteRenderer.srcObject = MediaStream.fromWeb([consumer.track!]);
-}
-} catch (e) {
-print('Error starting mediasoup consumer: $e');
-}
-}
+      if (consumer.track != null) {
+        final stream = await createLocalMediaStream('media-stream-id');
+        stream.addTrack(consumer.track!);
+        _remoteRenderer.srcObject = stream;
+      }
+    } catch (e) {
+      print('Error starting mediasoup consumer: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -249,13 +210,10 @@ print('Error starting mediasoup consumer: $e');
     super.dispose();
   }
 
-  // --- UI Actions ---
-
   void _sendMessage() {
     final message = _chatController.text.trim();
     if (message.isNotEmpty && _userId != null) {
       _classroomService.sendChatMessage(widget.classData['class_id'], message, userId: _userId!);
-      // Message is added via listener to avoid duplication
       _chatController.clear();
     }
   }
@@ -271,7 +229,7 @@ print('Error starting mediasoup consumer: $e');
   void _handleRequestToSpeak() {
     _classroomService.sendRequestToSpeak(
       widget.classData['class_id'],
-      widget.userData['user_id'].toString(), // Ensure ID is a string
+      widget.userData['user_id'].toString(),
       widget.userData['full_name'],
     );
     setState(() => _requestSent = true);
@@ -280,29 +238,45 @@ print('Error starting mediasoup consumer: $e');
     );
   }
 
-  // --- Build Method ---
-
-  Widget _buildConnectionIndicator() {
-    IconData icon;
-    Color color;
-    switch (_connectionState) {
-      case ConnectionState.active:
-        icon = Icons.wifi;
-        color = Colors.green;
-        break;
-      case ConnectionState.waiting:
-        icon = Icons.wifi_off;
-        color = Colors.orange;
-        break;
-      default:
-        icon = Icons.perm_scan_wifi_outlined;
-        color = Colors.red;
-        break;
+  Future<bool> _requestPermissions() async {
+    var status = await Permission.microphone.request();
+    if (status.isDenied) {
+      return false;
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Icon(icon, color: color),
-    );
+    return true;
+  }
+
+  Future<void> _startAudioBroadcast() async {
+    final hasPermissions = await _requestPermissions();
+    if(!hasPermissions){
+      return;
+    }
+    if (_mediasoupClientService.sendTransport == null) {
+      await _mediasoupClientService.createSendTransport(
+          _classroomService.socket, widget.classData['class_id']);
+    }
+
+    try {
+      _localAudioStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+      final audioTrack = _localAudioStream!.getAudioTracks().first;
+      await _mediasoupClientService.produce(
+        socket: _classroomService.socket,
+        transport: _mediasoupClientService.sendTransport!,
+        track: audioTrack,
+      );
+      setState(() => _isMicActive = true);
+    } catch (e) {
+      print("Error starting student mic: $e");
+    }
+  }
+
+  Future<void> _toggleMic() async {
+    if (_isMicActive) {
+      _localAudioStream?.getTracks().forEach((track) => track.stop());
+      setState(() => _isMicActive = false);
+    } else {
+      await _startAudioBroadcast();
+    }
   }
 
   @override
@@ -314,7 +288,6 @@ print('Error starting mediasoup consumer: $e');
       ),
       body: Column(
         children: [
-          // Video/Whiteboard View
           Expanded(
             flex: 3,
             child: Container(
@@ -323,14 +296,12 @@ print('Error starting mediasoup consumer: $e');
                 alignment: Alignment.center,
                 children: [
                   RTCVideoView(_remoteRenderer, mirror: false),
-                  // The WhiteboardWidget for the student is "read-only"
                   if (_isWhiteboardVisible)
                     WhiteboardWidget(
                       socket: _classroomService.socket,
                       classId: widget.classData['class_id'],
-                      isTeacher: false, // Student cannot draw
+                      isTeacher: false,
                     ),
-                  // Pause Overlay
                   if (_isPaused)
                     Container(
                       color: Colors.black.withOpacity(0.7),
@@ -352,12 +323,10 @@ print('Error starting mediasoup consumer: $e');
               ),
             ),
           ),
-          // Chat View
           Expanded(
             flex: 2,
             child: _buildChatView(),
           ),
-          // Status and Controls
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
@@ -366,6 +335,29 @@ print('Error starting mediasoup consumer: $e');
           _buildControls(),
         ],
       ),
+    );
+  }
+
+  Widget _buildConnectionIndicator() {
+    IconData icon;
+    Color color;
+    switch (_connectionState) {
+      case ConnectionState.active:
+        icon = Icons.wifi;
+        color = Colors.green;
+        break;
+      case ConnectionState.waiting:
+        icon = Icons.wifi_off;
+        color = Colors.orange;
+        break;
+      default:
+        icon = Icons.perm_scan_wifi_outlined;
+        color = Colors.red;
+        break;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Icon(icon, color: color),
     );
   }
 
@@ -435,33 +427,6 @@ print('Error starting mediasoup consumer: $e');
       ],
     );
   }
-
-  // --- Audio Controls for Free Mic Mode ---
-
-  Future<void> _toggleMic() async {
-    // This will now use the same produce mechanism as the teacher
-    if (_isMicActive) {
-      // Stop audio producer
-      // TODO: Implement producer closing logic in MediasoupClientService
-      _localAudioStream?.getTracks().forEach((track) => track.stop());
-      setState(() => _isMicActive = false);
-    } else {
-      // Start audio producer
-      try {
-        _localAudioStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
-        final audioTrack = _localAudioStream!.getAudioTracks().first;
-        await _mediasoupClientService.produce(
-          socket: _classroomService.socket,
-          transport: _mediasoupClientService.sendTransport!,
-          track: audioTrack,
-        );
-        setState(() => _isMicActive = true);
-      } catch (e) {
-        print("Error starting student mic: $e");
-      }
-    }
-  }
-
 
   Widget _buildControls() {
     return Container(

@@ -1,4 +1,4 @@
-import 'package.flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/user_service.dart';
 
 class ManageTeachersScreen extends StatefulWidget {
