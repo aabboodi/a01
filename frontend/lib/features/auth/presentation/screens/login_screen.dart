@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/auth_service.dart';
-import 'package:frontend/features/auth/presentation/screens/admin_dashboard.dart';
-import 'package:frontend/features/auth/presentation/screens/teacher_dashboard.dart';
-import 'package:frontend/features/auth/presentation/screens/student_dashboard.dart';
+import 'package:frontend/features/admin/admin_dashboard.dart';
+import 'package:frontend/features/teacher/teacher_dashboard.dart';
+import 'package:frontend/features/student/student_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -46,11 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
         page = const AdminDashboard();
         break;
       case 'teacher':
-        // Pass user data to the teacher dashboard
         page = TeacherDashboard(userData: userData);
         break;
       case 'student':
-        page = const StudentDashboard();
+        page = StudentDashboard(userData: userData);
         break;
       default:
         _showError('دور المستخدم غير معروف: $role');
@@ -79,8 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (build method remains the same)
-        return Scaffold(
+    return Scaffold(
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
