@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
-import 'package:frontend/features/auth/presentation/screens/teacher_classroom_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/manage_grades_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/archive_screen.dart';
+import 'package:frontend/features/teacher/teacher_classroom_screen.dart';
+import 'package:frontend/features/teacher/manage_grades_screen.dart';
+import 'package:frontend/features/admin/archive_screen.dart';
 
 class TeacherDashboard extends StatefulWidget {
   final Map<String, dynamic> userData;

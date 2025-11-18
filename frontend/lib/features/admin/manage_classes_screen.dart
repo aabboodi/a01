@@ -26,12 +26,26 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
     });
   }
 
-  Future<void> _deleteClass(String classId) async {
-    try {
-      await _classService.deleteClass(classId);
-      _loadClasses();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+  Future<void> _deleteClass(String classId, String className) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text('Are you sure you want to delete $className?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _classService.deleteClass(classId);
+        _loadClasses();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
@@ -159,7 +173,7 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(icon: const Icon(Icons.person_add), onPressed: () => _showEnrollDialog(classData['class_id'])),
-                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteClass(classData['class_id'])),
+                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteClass(classData['class_id'], classData['class_name'])),
                   ],
                 ),
               );

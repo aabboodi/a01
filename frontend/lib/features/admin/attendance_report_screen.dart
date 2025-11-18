@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/reports_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AttendanceReportScreen extends StatefulWidget {
-  final Map<String, dynamic> classData;
-
-  const AttendanceReportScreen({Key? key, required this.classData}) : super(key: key);
+  final String classId;
+  const AttendanceReportScreen({super.key, required this.classId});
 
   @override
-  _AttendanceReportScreenState createState() => _AttendanceReportScreenState();
+  State<AttendanceReportScreen> createState() => _AttendanceReportScreenState();
 }
 
 class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
@@ -17,27 +17,47 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   @override
   void initState() {
     super.initState();
-    _reportFuture = _reportsService.getAttendanceReport(widget.classData['class_id']);
+    _loadReport();
+  }
+
+  void _loadReport() {
+    setState(() {
+      _reportFuture = _reportsService.getAttendanceReport(widget.classId);
+    });
+  }
+
+  Future<void> _downloadReport() async {
+    final url = 'http://10.0.2.2:3000/reports/attendance/${widget.classId}/download';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      throw 'Could not launch $url';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Attendance Report for ${widget.classData['class_name']}'),
+        title: const Text('Attendance Report'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _downloadReport,
+            tooltip: 'Download as Excel',
+          ),
+        ],
       ),
       body: FutureBuilder<List<dynamic>>(
         future: _reportFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No attendance data available.'));
           }
-
-          final report = snapshot.data!;
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final report = snapshot.data ?? [];
           return ListView.builder(
             itemCount: report.length,
             itemBuilder: (context, index) {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/features/auth/presentation/screens/manage_teachers_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/manage_students_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/manage_classes_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/archive_screen.dart';
+import 'package:frontend/features/admin/manage_teachers_screen.dart';
+import 'package:frontend/features/admin/manage_students_screen.dart';
+import 'package:frontend/features/admin/manage_classes_screen.dart';
+import 'package:frontend/features/admin/archive_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AttendanceService } from '../attendance/attendance.service';
-import { AttendanceRecord, AttendanceStatus } from '../attendance/entities/attendance-record.entity';
+import { Workbook } from 'exceljs';
 
 @Injectable()
 export class ReportsService {
@@ -8,9 +8,6 @@ export class ReportsService {
 
   async getAttendanceReportForClass(classId: string): Promise<any> {
     const records = await this.attendanceService.getAttendanceForClass(classId);
-
-    // This is a simplified report generation logic. A more robust solution
-    // would handle multiple sessions and calculate duration more accurately.
     const studentDurations: { [key: string]: { name: string, duration: number, lastJoin: Date | null } } = {};
 
     for (const record of records) {
@@ -19,21 +16,35 @@ export class ReportsService {
         studentDurations[studentId] = { name: record.user.full_name, duration: 0, lastJoin: null };
       }
 
-      if (record.status === AttendanceStatus.JOINED) {
+      if (record.status === 'joined') {
         studentDurations[studentId].lastJoin = record.timestamp;
-      } else if (record.status === AttendanceStatus.LEFT && studentDurations[studentId].lastJoin) {
+      } else if (record.status === 'left' && studentDurations[studentId].lastJoin) {
         const duration = record.timestamp.getTime() - studentDurations[studentId].lastJoin!.getTime();
         studentDurations[studentId].duration += duration;
         studentDurations[studentId].lastJoin = null;
       }
     }
 
-    // Convert durations from ms to minutes
-    const report = Object.values(studentDurations).map(s => ({
+    return Object.values(studentDurations).map(s => ({
       name: s.name,
       durationMinutes: Math.round(s.duration / 60000),
     }));
+  }
 
-    return report;
+  async generateAttendanceReportExcel(classId: string): Promise<Buffer> {
+    const reportData = await this.getAttendanceReportForClass(classId);
+
+    const workbook = new Workbook();
+    const worksheet = workbook.addWorksheet('Attendance Report');
+
+    worksheet.columns = [
+      { header: 'Student Name', key: 'name', width: 30 },
+      { header: 'Duration (Minutes)', key: 'durationMinutes', width: 20 },
+    ];
+
+    worksheet.addRows(reportData);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as Buffer;
   }
 }

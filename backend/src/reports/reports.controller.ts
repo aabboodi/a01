@@ -1,9 +1,10 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, Res } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import { Response } from 'express';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reports')
@@ -14,5 +15,14 @@ export class ReportsController {
   @Roles(UserRole.ADMIN)
   getAttendanceReport(@Param('classId') classId: string) {
     return this.reportsService.getAttendanceReportForClass(classId);
+  }
+
+  @Get('attendance/:classId/download')
+  @Roles(UserRole.ADMIN)
+  async downloadAttendanceReport(@Param('classId') classId: string, @Res() res: Response) {
+    const buffer = await this.reportsService.generateAttendanceReportExcel(classId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=attendance-report-${classId}.xlsx`);
+    res.send(buffer);
   }
 }

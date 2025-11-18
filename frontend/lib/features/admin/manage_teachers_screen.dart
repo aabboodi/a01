@@ -24,30 +24,37 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
     });
   }
 
-  Future<void> _deleteTeacher(String userId) async {
-    try {
-      await _userService.deleteUser(userId);
-      _loadTeachers(); // Refresh the list
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+  Future<void> _deleteTeacher(String userId, String userName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text('Are you sure you want to delete $userName?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _userService.deleteUser(userId);
+        _loadTeachers();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  Future<void> _showAddTeacherDialog() async {
+  void _showAddTeacherDialog() {
     final formKey = GlobalKey<FormState>();
     final fullNameController = TextEditingController();
     final loginCodeController = TextEditingController();
-    // Simplified CreateUserDto for the dialog
-    final Map<String, dynamic> newUser = {
-      'full_name': '',
-      'login_code': '',
-      'role': 'teacher'
-    };
 
-
-    return showDialog<void>(
+    showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -61,13 +68,11 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
                   controller: fullNameController,
                   decoration: const InputDecoration(labelText: 'الاسم الكامل'),
                   validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
-                  onSaved: (value) => newUser['full_name'] = value!,
                 ),
                 TextFormField(
                   controller: loginCodeController,
                   decoration: const InputDecoration(labelText: 'كود الدخول'),
                   validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
-                  onSaved: (value) => newUser['login_code'] = value!,
                 ),
               ],
             ),
@@ -81,15 +86,14 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
               child: const Text('إضافة'),
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
-                  formKey.currentState!.save();
                   try {
                     await _userService.createUser(
-                      newUser['full_name'],
-                      newUser['login_code'],
-                      newUser['role'],
+                      fullNameController.text,
+                      loginCodeController.text,
+                      'teacher',
                     );
                     Navigator.of(context).pop();
-                    _loadTeachers(); // Refresh the list
+                    _loadTeachers();
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
@@ -115,10 +119,12 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
+          }
+          if (snapshot.hasError) {
             return Center(child: Text('خطأ: ${snapshot.error}'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('لا يوجد مدرسون لعرضهم.'));
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('لا يوجد مدرسين لعرضهم.'));
           }
 
           final teachers = snapshot.data!;
@@ -128,10 +134,10 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
               final teacher = teachers[index];
               return ListTile(
                 title: Text(teacher['full_name']),
-                subtitle: Text('الكود: ${teacher['login_code']}'),
+                subtitle: Text('Code: ${teacher['login_code']}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _deleteTeacher(teacher['user_id']),
+                  onPressed: () => _deleteTeacher(teacher['user_id'], teacher['full_name']),
                 ),
               );
             },

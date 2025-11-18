@@ -30,7 +30,6 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
       _error = null;
     });
     try {
-      // Use the efficient API call
       final students = await _userService.getUsersByRole('student');
       setState(() {
         _allStudents = students;
@@ -57,20 +56,33 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
     });
   }
 
-  Future<void> _deleteStudent(String userId) async {
-    try {
-      await _userService.deleteUser(userId);
-      _loadStudents(); // Refresh the list
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+  Future<void> _deleteStudent(String userId, String userName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text('Are you sure you want to delete $userName?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _userService.deleteUser(userId);
+        _loadStudents();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   Future<void> _showAddStudentDialog() async {
-    // Dialog logic remains the same as it is already well-implemented
-        final formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
     final fullNameController = TextEditingController();
     final loginCodeController = TextEditingController();
 
@@ -187,13 +199,17 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
           DataColumn(label: Text('إجراء')),
         ],
         rows: _filteredStudents.map((student) {
+          final bool isNew = student['created_at'] != null &&
+                             DateTime.now().difference(DateTime.parse(student['created_at'])).inDays <= 7;
+          final color = isNew ? Colors.green : Colors.red;
+
           return DataRow(cells: [
-            DataCell(Text(student['full_name'])),
+            DataCell(Text(student['full_name'], style: TextStyle(color: color))),
             DataCell(Text(student['login_code'])),
             DataCell(Text(student['phone_number'] ?? 'N/A')),
             DataCell(IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteStudent(student['user_id']),
+              onPressed: () => _deleteStudent(student['user_id'], student['full_name']),
             )),
           ]);
         }).toList(),

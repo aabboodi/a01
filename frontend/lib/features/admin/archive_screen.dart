@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:frontend/features/auth/presentation/screens/class_archive_screen.dart';
-import 'package:frontend/features/auth/presentation/screens/manage_grades_screen.dart';
-import 'package:frontend/features/auth/presentation/widgets/chat_history_widget.dart';
+import 'package:frontend/features/admin/class_archive_screen.dart';
+import 'package:frontend/features/teacher/manage_grades_screen.dart';
+import 'package:frontend/features/admin/chat_history_widget.dart';
 
 class ArchiveScreen extends StatelessWidget {
   final Map<String, dynamic> classData;
