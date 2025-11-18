@@ -12,15 +12,28 @@ class GradesService {
 
   Future<List<dynamic>> getGradesForClass(String classId) async {
     final token = await _getAccessToken();
-    final response = await http.get(
-      Uri.parse('$_baseUrl/grades/class/$classId'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
+    final url = Uri.parse('$_baseUrl/grades/class/$classId');
+    final response = await http.get(url, headers: {'Authorization': 'Bearer $token'});
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return json.decode(response.body);
     } else {
-      throw Exception('Failed to load grades.');
+      throw Exception('Failed to load grades');
+    }
+  }
+
+  Future<void> upsertGrade(Map<String, dynamic> gradeData) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/grades');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode(gradeData),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to save grade');
     }
   }
 }

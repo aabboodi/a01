@@ -18,7 +18,7 @@ dependencies:
   socket_io_client: ^2.0.3
 
   # For WebRTC functionality (video, audio)
-  flutter_webrtc: ^0.9.48
+  flutter_webrtc: ^1.2.0
 
   # For simple key-value storage
   shared_preferences: ^2.2.3
@@ -34,11 +34,12 @@ dependencies:
 
   # For Firebase services
   firebase_core: ^2.32.0
-  firebase_messaging: ^14.9.4
+  firebase_messaging: ^14.7.10
   video_player: ^2.8.6
-  #mediasfu_mediasoup_client: ^1.0.8
+  mediasfu_mediasoup_client: ^0.1.0
 
   cupertino_icons: ^1.0.2
+  intl: ^0.18.0
 
 dev_dependencies:
   flutter_test:

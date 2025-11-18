@@ -5,10 +5,10 @@ import 'package:frontend/features/auth/application/services/user_service.dart';
 class ManageGradesScreen extends StatefulWidget {
   final Map<String, dynamic> classData;
 
-  const ManageGradesScreen({Key? key, required this.classData}) : super(key: key);
+  const ManageGradesScreen({super.key, required this.classData});
 
   @override
-  _ManageGradesScreenState createState() => _ManageGradesScreenState();
+  State<ManageGradesScreen> createState() => _ManageGradesScreenState();
 }
 
 class _ManageGradesScreenState extends State<ManageGradesScreen> {
@@ -89,10 +89,10 @@ class _ManageGradesScreenState extends State<ManageGradesScreen> {
   }
 
   void _showEditGradeDialog(BuildContext context, dynamic student, dynamic currentGrade) {
-    final _interactionController = TextEditingController(text: currentGrade?['interaction_grade']?.toString() ?? '0');
-    final _homeworkController = TextEditingController(text: currentGrade?['homework_grade']?.toString() ?? '0');
-    final _oralExamController = TextEditingController(text: currentGrade?['oral_exam_grade']?.toString() ?? '0');
-    final _writtenExamController = TextEditingController(text: currentGrade?['written_exam_grade']?.toString() ?? '0');
+    final interactionController = TextEditingController(text: currentGrade?['interaction_grade']?.toString() ?? '0');
+    final homeworkController = TextEditingController(text: currentGrade?['homework_grade']?.toString() ?? '0');
+    final oralExamController = TextEditingController(text: currentGrade?['oral_exam_grade']?.toString() ?? '0');
+    final writtenExamController = TextEditingController(text: currentGrade?['written_exam_grade']?.toString() ?? '0');
 
     showDialog(
       context: context,
@@ -103,10 +103,10 @@ class _ManageGradesScreenState extends State<ManageGradesScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: _interactionController, decoration: const InputDecoration(labelText: 'Interaction (Max 7)'), keyboardType: TextInputType.number),
-                TextField(controller: _homeworkController, decoration: const InputDecoration(labelText: 'Homework (Max 7)'), keyboardType: TextInputType.number),
-                TextField(controller: _oralExamController, decoration: const InputDecoration(labelText: 'Oral Exam (Max 60)'), keyboardType: TextInputType.number),
-                TextField(controller: _writtenExamController, decoration: const InputDecoration(labelText: 'Written Exam (Max 7)'), keyboardType: TextInputType.number),
+                TextField(controller: interactionController, decoration: const InputDecoration(labelText: 'Interaction (Max 7)'), keyboardType: TextInputType.number),
+                TextField(controller: homeworkController, decoration: const InputDecoration(labelText: 'Homework (Max 7)'), keyboardType: TextInputType.number),
+                TextField(controller: oralExamController, decoration: const InputDecoration(labelText: 'Oral Exam (Max 60)'), keyboardType: TextInputType.number),
+                TextField(controller: writtenExamController, decoration: const InputDecoration(labelText: 'Written Exam (Max 7)'), keyboardType: TextInputType.number),
               ],
             ),
           ),
@@ -118,10 +118,10 @@ class _ManageGradesScreenState extends State<ManageGradesScreen> {
                   final gradeData = {
                     'studentId': student['user_id'],
                     'classId': widget.classData['class_id'],
-                    'interaction_grade': double.parse(_interactionController.text),
-                    'homework_grade': double.parse(_homeworkController.text),
-                    'oral_exam_grade': double.parse(_oralExamController.text),
-                    'written_exam_grade': double.parse(_writtenExamController.text),
+                    'interaction_grade': double.parse(interactionController.text),
+                    'homework_grade': double.parse(homeworkController.text),
+                    'oral_exam_grade': double.parse(oralExamController.text),
+                    'written_exam_grade': double.parse(writtenExamController.text),
                   };
                   await _gradesService.upsertGrade(gradeData);
                   Navigator.pop(context);

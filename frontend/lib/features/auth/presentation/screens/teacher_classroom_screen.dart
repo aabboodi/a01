@@ -9,6 +9,8 @@ import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widg
 import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
 import 'package:shared_preferences/shared_preferences.dart'; // To get token
+import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 
 // Data models for chat and speak requests
 class ChatMessage {
@@ -72,7 +74,7 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   bool _isRecording = false;
   String? _currentRecordingId;
   MediaRecorder? _mediaRecorder;
-  String? _recordedFilePath;
+
 
   // Chat and Speak Requests state
   final List<ChatMessage> _chatMessages = [];
@@ -89,12 +91,6 @@ class _TeacherClassroomScreenState extends State<TeacherClassroomScreen> {
   bool _isPaused = false; // New state for session pause
 ConnectionState _connectionState = ConnectionState.none;
 
-  // WebRTC configuration
-  final Map<String, dynamic> _iceServers = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-    ]
-  };
 
   @override
   void initState() {
@@ -221,16 +217,16 @@ ConnectionState _connectionState = ConnectionState.none;
     );
     _mediasoupClientService.initialize(widget.classData['class_id'], _classroomService.socket);
 
-    _classroomService.socket.onConnect((_) => setState(() => _connectionState = ConnectionState.active));
-    _classroomService.socket.onConnecting((_) => setState(() => _connectionState = ConnectionState.waiting));
-    _classroomService.socket.onDisconnect((_) => setState(() => _connectionState = ConnectionState.none));
+    _classroomService.socket.on('connect', (_) => setState(() => _connectionState = ConnectionState.active));
+    _classroomService.socket.on('connecting', (_) => setState(() => _connectionState = ConnectionState.waiting));
+    _classroomService.socket.on('disconnect', (_) => setState(() => _connectionState = ConnectionState.none));
   }
 
   @override
   void dispose() {
     _localRenderer.dispose();
     _localStream?.getTracks().forEach((track) => track.stop());
-    _mediaRecorder?.dispose();
+    _mediaRecorder?.stop();
     _classroomService.dispose();
     _chatController.dispose();
     _scrollController.dispose();
@@ -243,7 +239,6 @@ ConnectionState _connectionState = ConnectionState.none;
     final message = _chatController.text.trim();
     if (message.isNotEmpty && _userId != null) {
       _classroomService.sendChatMessage(widget.classData['class_id'], message, userId: _userId!);
-      // The message will be added via the 'onChatMessageReceived' listener to avoid duplication
       _chatController.clear();
     }
   }
@@ -270,7 +265,6 @@ ConnectionState _connectionState = ConnectionState.none;
                 child: const Text('سماح'),
                 onPressed: () {
                   _classroomService.allowToSpeak(request.socketId);
-                  // Remove the request from the list after allowing
                   setState(() {
                     _speakRequests.removeWhere((r) => r.socketId == request.socketId);
                   });
@@ -290,7 +284,7 @@ ConnectionState _connectionState = ConnectionState.none;
     if (!resume) {
       _elapsedTime = Duration.zero;
     }
-    _timer?.cancel(); // Ensure no multiple timers are running
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -317,32 +311,24 @@ ConnectionState _connectionState = ConnectionState.none;
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      // Stop recording
       if (_mediaRecorder != null && _currentRecordingId != null) {
         try {
           final path = await _mediaRecorder!.stop();
           await _recordingService.stopRecording(_currentRecordingId!);
-
           setState(() {
             _isRecording = false;
-            _recordedFilePath = path;
           });
-
-          // Upload the file
           await _recordingService.uploadRecording(_currentRecordingId!, path);
-
         } catch (e) {
           print("Failed to stop recording: $e");
         }
       }
     } else {
-      // Start recording
       if (_localStream != null) {
         try {
           final recording = await _recordingService.startRecording(widget.classData['class_id']);
           _mediaRecorder = MediaRecorder();
           await _mediaRecorder!.start(_localStream!);
-
           setState(() {
             _isRecording = true;
             _currentRecordingId = recording['recording_id'];
@@ -358,8 +344,6 @@ ConnectionState _connectionState = ConnectionState.none;
 
   Future<void> _fetchAllStudents() async {
     try {
-      // Assuming you have a method in your service to get students by class.
-      // This might need to be created.
       final students = await _apiUserService.getUsersByClass(widget.classData['class_id']);
       if (mounted) {
         setState(() {
@@ -396,17 +380,34 @@ ConnectionState _connectionState = ConnectionState.none;
     );
   }
 
+  Future<bool> _requestPermissions() async {
+    var status = await Permission.camera.request();
+    if (status.isDenied) {
+      return false;
+    }
+    status = await Permission.microphone.request();
+    if (status.isDenied) {
+      return false;
+    }
+    return true;
+  }
+
   // --- Broadcasting and Media Controls ---
 
   Future<void> _toggleBroadcast() async {
     if (_isBroadcasting) {
       await _stopBroadcast();
     } else {
-await _startMediasoupBroadcast();
+      await _startMediasoupBroadcast();
     }
   }
 
 Future<void> _startMediasoupBroadcast() async {
+    final hasPermissions = await _requestPermissions();
+    if(!hasPermissions) {
+      // Handle permissions not granted
+      return;
+    }
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({'video': true, 'audio': true});
       _localRenderer.srcObject = _localStream;
@@ -429,15 +430,11 @@ await _mediasoupClientService.produce(
 socket: _classroomService.socket,
 transport: _mediasoupClientService.sendTransport!,
 track: videoTrack,
-encodings: [
-// Simulcast encodings
-ScalabilityMode.parse('L1T3'),
-],
 );
 
       setState(() {
         _isBroadcasting = true;
-_startTimer();
+        _startTimer();
       });
     } catch (e) {
 print('Error starting mediasoup broadcast: $e');
@@ -448,7 +445,6 @@ print('Error starting mediasoup broadcast: $e');
     try {
       _localStream?.getTracks().forEach((track) => track.stop());
       _localRenderer.srcObject = null;
-// TODO: Close mediasoup transports and producers
       setState(() {
         _isBroadcasting = false;
         _isScreenSharing = false;
@@ -463,7 +459,6 @@ print('Error starting mediasoup broadcast: $e');
   Future<void> _toggleScreenShare() async {
     if (!_isBroadcasting) return;
 
-    // Turn off whiteboard if active, as they conflict for screen space
     if (_isWhiteboardActive) {
       setState(() => _isWhiteboardActive = false);
     }
@@ -474,7 +469,6 @@ print('Error starting mediasoup broadcast: $e');
   void _toggleWhiteboard() {
     if (!_isBroadcasting) return;
 
-    // Turn off screen sharing if active
     if (_isScreenSharing) {
        _switchMediaStream(screenSharing: false);
     }
@@ -494,27 +488,12 @@ print('Error starting mediasoup broadcast: $e');
     _localRenderer.srcObject = _localStream;
 
     var videoTrack = _localStream!.getVideoTracks()[0];
-    await _mediasoupClientService.sendTransport!.replaceTrack(videoTrack);
+    var producer = _mediasoupClientService.findProducerByTrackKind('video');
+    if (producer != null) {
+      await producer.replaceTrack(track: videoTrack);
+    }
 
     setState(() => _isScreenSharing = screenSharing);
-  }
-
-  Future<void> _createPeerConnection() async {
-    _peerConnection = await createPeerConnection(_iceServers, {});
-
-    _peerConnection!.onIceCandidate = (event) {
-      if (event.candidate != null) {
-        _classroomService.sendIceCandidate(widget.classData['class_id'], {
-          'candidate': event.candidate!.candidate,
-          'sdpMid': event.candidate!.sdpMid,
-          'sdpMLineIndex': event.candidate!.sdpMLineIndex,
-        });
-      }
-    };
-
-    _localStream?.getTracks().forEach((track) {
-      _peerConnection?.addTrack(track, _localStream!);
-    });
   }
 
   // --- Build Method ---
@@ -563,7 +542,6 @@ print('Error starting mediasoup broadcast: $e');
       ),
       body: Column(
         children: [
-          // Video/Whiteboard View
           Expanded(
             flex: 3,
             child: Container(
@@ -585,18 +563,15 @@ print('Error starting mediasoup broadcast: $e');
                     ),
             ),
           ),
-          // Chat View
           Expanded(
             flex: 1,
             child: _buildChatView(),
           ),
-          // Status Bar
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
             child: Text('حالة الخادم: $_serverMessage'),
           ),
-          // Controls
           _buildControls(),
         ],
       ),
@@ -736,19 +711,16 @@ print('Error starting mediasoup broadcast: $e');
       _isPaused = !_isPaused;
     });
 
-    // Toggle media tracks
     _localStream?.getTracks().forEach((track) {
       track.enabled = !_isPaused;
     });
 
-    // Pause/Resume timer
     if (_isPaused) {
       _timer?.cancel();
     } else {
       _startTimer(resume: true);
     }
 
-    // Notify clients
     _classroomService.socket.emit('session-state-changed', {
       'classId': widget.classData['class_id'],
       'isPaused': _isPaused,
@@ -762,7 +734,6 @@ print('Error starting mediasoup broadcast: $e');
       _isFreeMicMode = !_isFreeMicMode;
     });
 
-    // Notify the backend and other clients
     _classroomService.socket.emit('set-audio-mode', {
       'classId': widget.classData['class_id'],
       'isFreeMicMode': _isFreeMicMode,

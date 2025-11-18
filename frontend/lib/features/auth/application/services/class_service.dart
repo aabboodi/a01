@@ -1,88 +1,107 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ClassService {
-  final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
+  final String _baseUrl = 'http://10.0.2.2:3000';
+
+  Future<String?> _getAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('access_token');
+  }
 
   Future<List<dynamic>> getAllClasses() async {
-    // ... (getAllClasses implementation remains the same)
-        final url = Uri.parse('$_baseUrl/classes');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to load classes');
-      }
-    } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes');
+    final response = await http.get(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load classes');
     }
   }
 
-  Future<List<dynamic>> getClassesByTeacher(String teacherId) async {
-    final url = Uri.parse('$_baseUrl/classes?teacherId=$teacherId');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to load classes for teacher');
-      }
-    } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
-    }
-  }
-
-  Future<Map<String, dynamic>> createClass(String className, String teacherId) async {
-    // ... (createClass implementation remains the same)
-        final url = Uri.parse('$_baseUrl/classes');
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'class_name': className,
-          'teacher_id': teacherId,
-        }),
-      );
-
-      if (response.statusCode == 201) {
-        return json.decode(response.body);
-      } else {
-        final errorBody = json.decode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to create class.');
-      }
-    } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
-    }
-  }
-
-  Future<void> enrollStudents(String classId, List<String> studentIds) async {
-    final url = Uri.parse('$_baseUrl/classes/$classId/enroll');
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'student_ids': studentIds}),
-      );
-
-      if (response.statusCode != 204) {
-        throw Exception('Failed to enroll students.');
-      }
-    } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+  Future<void> createClass(String name, String teacherId) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'class_name': name, 'teacher_id': teacherId}),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to create class');
     }
   }
 
   Future<void> deleteClass(String classId) async {
+    final token = await _getAccessToken();
     final url = Uri.parse('$_baseUrl/classes/$classId');
-    try {
-      final response = await http.delete(url);
-      if (response.statusCode != 204) {
-        throw Exception('Failed to delete class.');
-      }
-    } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+    final response = await http.delete(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete class');
+    }
+  }
+
+  Future<void> enrollStudents(String classId, List<String> studentIds) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes/$classId/enroll');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'student_ids': studentIds}),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to enroll students');
+    }
+  }
+
+  Future<List<dynamic>> getClassesForTeacher(String teacherId) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes?teacherId=$teacherId');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load classes for teacher.');
+    }
+  }
+
+  Future<List<dynamic>> getClassesForStudent(String studentId) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final allClasses = json.decode(response.body) as List;
+      final studentClasses = allClasses.where((c) {
+        final students = c['students'] as List;
+        return students.any((s) => s['user_id'] == studentId);
+      }).toList();
+      return studentClasses;
+    } else {
+      throw Exception('Failed to load classes for student.');
     }
   }
 }
