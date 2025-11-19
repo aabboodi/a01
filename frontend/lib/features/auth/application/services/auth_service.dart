@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthService {
   final String _baseUrl = 'http://10.0.2.2:3000';
+  final _storage = const FlutterSecureStorage();
 
   Future<Map<String, dynamic>> login(String loginCode) async {
     final url = Uri.parse('$_baseUrl/auth/login');
@@ -21,8 +22,7 @@ class AuthService {
         final String accessToken = body['access_token'];
 
         // Store the token securely
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', accessToken);
+        await _storage.write(key: 'access_token', value: accessToken);
 
         // Decode the token to get user data (role, etc.)
         Map<String, dynamic> decodedToken = JwtDecoder.decode(accessToken);

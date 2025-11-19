@@ -1,0 +1,17 @@
+#-*- mode: git-ignore -*-
+
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/coverage
+
+# production
+/dist
+
+# misc
+.DS_Store
+*.pem
+
+# Environment Variables
+.env

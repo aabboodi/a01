@@ -22,6 +22,7 @@ dependencies:
 
   # For simple key-value storage
   shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.2.2
 
   # For decoding JWTs to extract payload
   jwt_decoder: ^2.0.1
