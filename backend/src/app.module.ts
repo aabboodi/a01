@@ -16,6 +16,7 @@ import { ReportsModule } from './reports/reports.module';
 import { MediasoupModule } from './mediasoup/mediasoup.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { join } from 'path';
     AttendanceModule,
     ReportsModule,
     MediasoupModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
