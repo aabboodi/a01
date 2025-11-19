@@ -8,7 +8,7 @@ import 'package:frontend/features/classroom/application/services/mediasoup_clien
 import 'package:frontend/features/classroom/presentation/widgets/whiteboard_widget.dart';
 import 'package:frontend/features/classroom/presentation/screens/video_player_screen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart'; // To decode JWT
-import 'package:shared_preferences/shared_preferences.dart'; // To get token
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // To get token securely
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -107,8 +107,8 @@ ConnectionState _connectionState = ConnectionState.none;
   }
 
   Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'access_token');
     if (token != null) {
       final decodedToken = JwtDecoder.decode(token);
       _userId = decodedToken['userId'];
