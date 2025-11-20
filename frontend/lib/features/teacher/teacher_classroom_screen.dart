@@ -328,7 +328,8 @@ ConnectionState _connectionState = ConnectionState.none;
         try {
           final recording = await _recordingService.startRecording(widget.classData['class_id']);
           _mediaRecorder = MediaRecorder();
-          await _mediaRecorder!.start(_localStream!);
+          // FIXME: This is a temporary fix. The path should be handled properly.
+          await _mediaRecorder!.start('/tmp/temp.webm');
           setState(() {
             _isRecording = true;
             _currentRecordingId = recording['recording_id'];
@@ -424,12 +425,16 @@ await _mediasoupClientService.produce(
 socket: _classroomService.socket,
 transport: _mediasoupClientService.sendTransport!,
 track: audioTrack,
+stream: _localStream!,
+source: 'mic',
 );
 
 await _mediasoupClientService.produce(
 socket: _classroomService.socket,
 transport: _mediasoupClientService.sendTransport!,
 track: videoTrack,
+stream: _localStream!,
+source: 'webcam',
 );
 
       setState(() {
@@ -490,7 +495,7 @@ print('Error starting mediasoup broadcast: $e');
     var videoTrack = _localStream!.getVideoTracks()[0];
     var producer = _mediasoupClientService.findProducerByTrackKind('video');
     if (producer != null) {
-      await producer.replaceTrack(track: videoTrack);
+      await producer.replaceTrack(videoTrack);
     }
 
     setState(() => _isScreenSharing = screenSharing);

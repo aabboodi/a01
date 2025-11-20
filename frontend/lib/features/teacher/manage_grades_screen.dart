@@ -30,7 +30,7 @@ class _ManageGradesScreenState extends State<ManageGradesScreen> {
       final students = await _userService.getUsersByClass(widget.classData['class_id']);
       final grades = await _gradesService.getGradesForClass(widget.classData['class_id']);
 
-      final gradesMap = {for (var g in grades) g['student']['user_id']: g};
+      final gradesMap = <String, dynamic>{for (var g in grades) g['student']['user_id']: g};
 
       setState(() {
         _students = students;

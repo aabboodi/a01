@@ -1,12 +1,14 @@
 import 'package:mediasfu_mediasoup_client/mediasfu_mediasoup_client.dart';
+import 'package:mediasfu_mediasoup_client/src/transport.dart';
+import 'package:mediasfu_mediasoup_client/src/transport.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'dart:async';
 
 class MediasoupClientService {
   late Device device;
   IO.Socket? _socket;
-  SendTransport? sendTransport;
-  RecvTransport? recvTransport;
+  Transport? sendTransport;
+  Transport? recvTransport;
   Producer? _videoProducer;
   Producer? _audioProducer;
 
@@ -46,6 +48,14 @@ class MediasoupClientService {
         }, ack: (producerId) => callback(producerId));
       });
 
+      sendTransport!.on('newproducer', (producer) {
+        if (producer.kind == 'video') {
+          _videoProducer = producer;
+        } else {
+          _audioProducer = producer;
+        }
+      });
+
       completer.complete();
     });
     return completer.future;
@@ -74,45 +84,42 @@ class MediasoupClientService {
     return completer.future;
   }
 
-  Future<Consumer> consume({
+  Future<void> consume({
     required IO.Socket socket,
-    required RecvTransport transport,
+    required Transport transport,
     required String producerId,
     required RtpCapabilities rtpCapabilities,
+    required String peerId,
   }) async {
-    final completer = Completer<Consumer>();
     socket.emitWithAck('consume', {
       'transportId': transport.id,
       'producerId': producerId,
       'rtpCapabilities': rtpCapabilities.toMap(),
     }, ack: (data) async {
-      final consumer = await transport.consume(
+      transport.consume(
         id: data['id'],
         producerId: data['producerId'],
         kind: data['kind'],
         rtpParameters: RtpParameters.fromMap(data['rtpParameters']),
+        peerId: peerId,
       );
-      completer.complete(consumer);
     });
-    return completer.future;
   }
 
-  Future<Producer> produce({
+  Future<void> produce({
     required IO.Socket socket,
-    required SendTransport transport,
+    required Transport transport,
     required MediaStreamTrack track,
+    required MediaStream stream,
     List<RtpEncodingParameters>? encodings,
+    String source = 'webcam', // Default to webcam
   }) async {
-    final producer = await transport.produce(
+    transport.produce(
       track: track,
-      encodings: encodings,
+      stream: stream,
+      encodings: encodings ?? [],
+      source: source,
     );
-    if(track.kind == 'video'){
-      _videoProducer = producer;
-    } else {
-      _audioProducer = producer;
-    }
-    return producer;
   }
 
   Producer? findProducerByTrackKind(String kind) {
