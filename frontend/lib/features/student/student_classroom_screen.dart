@@ -183,18 +183,21 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         widget.classData['class_id'],
       );
 
-      final consumer = await _mediasoupClientService.consume(
+      _mediasoupClientService.recvTransport!.on('newconsumer', (consumer) async {
+        if (consumer.track != null) {
+          final stream = await createLocalMediaStream('media-stream-id');
+          stream.addTrack(consumer.track!);
+          _remoteRenderer.srcObject = stream;
+        }
+      });
+
+      await _mediasoupClientService.consume(
         socket: _classroomService.socket,
         transport: _mediasoupClientService.recvTransport!,
         producerId: producerId,
         rtpCapabilities: _mediasoupClientService.device.rtpCapabilities,
+        peerId: producerId,
       );
-
-      if (consumer.track != null) {
-        final stream = await createLocalMediaStream('media-stream-id');
-        stream.addTrack(consumer.track!);
-        _remoteRenderer.srcObject = stream;
-      }
     } catch (e) {
       print('Error starting mediasoup consumer: $e');
     }
@@ -263,6 +266,8 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         socket: _classroomService.socket,
         transport: _mediasoupClientService.sendTransport!,
         track: audioTrack,
+        stream: _localAudioStream!,
+        source: 'mic',
       );
       setState(() => _isMicActive = true);
     } catch (e) {

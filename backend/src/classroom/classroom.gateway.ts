@@ -11,6 +11,8 @@ import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
 import { MediasoupService } from '../mediasoup/mediasoup.service';
 import { Router } from 'mediasoup/node/lib/Router';
+import { RedisService } from '../redis/redis.service';
+import Redis from 'ioredis';
 
 @WebSocketGateway({
   cors: {
@@ -21,13 +23,10 @@ export class ClassroomGateway {
   @WebSocketServer()
   server: Server;
 
-  // classId -> (userId -> { fullName })
-  private readonly attendance = new Map<string, Map<string, { fullName: string }>>();
-  // clientId -> { classId, userId }
-  private readonly clients = new Map<string, { classId: string; userId: string }>();
   private readonly rooms = new Map<string, Router>();
-  private readonly transports = new Map<string, any>(); // Store transports by id
-  private readonly producers = new Map<string, any>(); // Store producers by id
+  private readonly transports = new Map<string, any>();
+  private readonly producers = new Map<string, any>();
+  private readonly redisClient: Redis;
 
   constructor(
     private readonly chatService: ChatService,
@@ -35,7 +34,10 @@ export class ClassroomGateway {
     private readonly classesService: ClassesService,
     private readonly attendanceService: AttendanceService,
     private readonly mediasoupService: MediasoupService,
-  ) {}
+    private readonly redisService: RedisService,
+  ) {
+    this.redisClient = this.redisService.getClient();
+  }
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -43,54 +45,56 @@ export class ClassroomGateway {
 
   async handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
-    const clientInfo = this.clients.get(client.id);
-    if (clientInfo) {
-      const { classId, userId } = clientInfo;
-      const classAttendance = this.attendance.get(classId);
-      if (classAttendance) {
-        classAttendance.delete(userId);
-        this.clients.delete(client.id);
+    const clientKey = `client:${client.id}`;
+    const clientInfo = await this.redisClient.hgetall(clientKey);
 
-        // Notify room that user has left
-        this.server.to(classId).emit('user-left', { userId });
+    if (clientInfo && clientInfo.userId && clientInfo.classId) {
+      const { userId, classId } = clientInfo;
+      const attendanceKey = `attendance:${classId}`;
 
-        // Record event in DB
-        const user = await this.usersService.findOneById(userId);
-        const classEntity = await this.classesService.findOne(classId);
-        if (user && classEntity) {
-          this.attendanceService.recordEvent(user, classEntity, 'left' as any);
-        }
+      await this.redisClient.srem(attendanceKey, userId);
+      await this.redisClient.del(clientKey);
+
+      // Notify room that user has left
+      this.server.to(classId).emit('user-left', { userId });
+
+      // Record event in DB
+      const user = await this.usersService.findOneById(userId);
+      const classEntity = await this.classesService.findOne(classId);
+      if (user && classEntity) {
+        this.attendanceService.recordEvent(user, classEntity, 'left' as any);
       }
     }
   }
 
   @SubscribeMessage('join-room')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { classId: string; userId: string; fullName: string },
     @ConnectedSocket() client: Socket,
-  ): void {
+  ): Promise<void> {
     console.log(`Client ${client.id} (${data.fullName}) is joining room ${data.classId}`);
     client.join(data.classId);
 
-    // Track attendance
-    if (!this.attendance.has(data.classId)) {
-      this.attendance.set(data.classId, new Map());
-    }
-    this.attendance.get(data.classId)!.set(data.userId, { fullName: data.fullName });
-    this.clients.set(client.id, { classId: data.classId, userId: data.userId });
+    const { classId, userId, fullName } = data;
+    const clientKey = `client:${client.id}`;
+    const attendanceKey = `attendance:${classId}`;
+
+    // Track attendance and client info in Redis
+    await this.redisClient.sadd(attendanceKey, userId);
+    await this.redisClient.hset(clientKey, { classId, userId });
 
     // Record event in DB
-    const user = await this.usersService.findOneById(data.userId);
-    const classEntity = await this.classesService.findOne(data.classId);
+    const user = await this.usersService.findOneById(userId);
+    const classEntity = await this.classesService.findOne(classId);
     if (user && classEntity) {
       this.attendanceService.recordEvent(user, classEntity, 'joined' as any);
     }
 
     // Notify the room that a new user has joined
-    this.server.to(data.classId).emit('user-joined', { userId: data.userId, fullName: data.fullName });
+    this.server.to(classId).emit('user-joined', { userId, fullName });
 
     // Send the current attendance list to the newly joined client
-    const currentAttendance = Array.from(this.attendance.get(data.classId)!.keys());
+    const currentAttendance = await this.redisClient.smembers(attendanceKey);
     client.emit('current-attendance', currentAttendance);
 
     // Create a mediasoup router for the room if it doesn't exist
