@@ -17,6 +17,15 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+
+    project.plugins.withType<com.android.build.gradle.BasePlugin>().configureEach {
+        compileOptions {
+            // Flag to enable support for the new language APIs
+            isCoreLibraryDesugaringEnabled = true
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
