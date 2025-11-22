@@ -9,6 +9,7 @@ class AuthService {
 
   Future<Map<String, dynamic>> login(String loginCode) async {
     final url = Uri.parse('$_baseUrl/auth/login');
+    print('🔥🔥🔥 Attempting to login to: $url');
 
     try {
       final response = await http.post(
@@ -17,22 +18,23 @@ class AuthService {
         body: json.encode({'login_code': loginCode}),
       );
 
+      print('🔥🔥🔥 Server Response Status Code: ${response.statusCode}');
+      print('🔥🔥🔥 Server Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
         final body = json.decode(response.body);
         final String accessToken = body['access_token'];
 
-        // Store the token securely
         await _storage.write(key: 'access_token', value: accessToken);
-
-        // Decode the token to get user data (role, etc.)
         Map<String, dynamic> decodedToken = JwtDecoder.decode(accessToken);
         return decodedToken;
       } else {
         final errorBody = json.decode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to login.');
+        throw Exception('Server Error: ${errorBody['message'] ?? 'Failed to login.'}');
       }
     } catch (e) {
-      throw Exception('A network error occurred: ${e.toString()}');
+      print('🔥🔥🔥 Network or Parsing Error: ${e.toString()}');
+      throw Exception('Network Error: Could not connect to the server. ${e.toString()}');
     }
   }
 }
