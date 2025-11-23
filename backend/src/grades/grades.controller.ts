@@ -1,16 +1,16 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { GradesService } from './grades.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @Controller('grades')
 export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
 
   @Get('class/:classId')
-  @Roles('admin') // Only admin can access this
+  @Roles(UserRole.ADMIN) // Only admin can access this
   async getGradesForClass(@Param('classId') classId: string) {
     return this.gradesService.getGradesForClass(classId);
   }

@@ -6,8 +6,8 @@ import {
   JoinColumn,
   CreateDateColumn,
 } from 'typeorm';
-import { User } from '../users/entities/user.entity';
-import { Class } from '../classes/entities/class.entity';
+import { User } from '../../users/entities/user.entity';
+import { Class } from '../../classes/entities/class.entity';
 
 export enum AttendanceStatus {
   JOINED = 'joined',

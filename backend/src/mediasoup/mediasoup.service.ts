@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import * as mediasoup from 'mediasoup';
-import { Worker } from 'mediasoup/node/lib/Worker';
+import { Worker } from 'mediasoup/node/lib/worker';
 
 @Injectable()
 export class MediasoupService implements OnModuleInit {

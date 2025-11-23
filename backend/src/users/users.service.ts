@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class UsersService {
 
   async findAll(role?: string): Promise<User[]> {
     if (role) {
-      return this.userRepository.find({ where: { role } });
+      return this.userRepository.find({ where: { role: role as UserRole } });
     }
     return this.userRepository.find();
   }
@@ -58,7 +58,7 @@ export class UsersService {
   }
 
   async findAdmin(): Promise<User> {
-    const admin = await this.userRepository.findOne({ where: { role: 'admin' } });
+    const admin = await this.userRepository.findOne({ where: { role: UserRole.ADMIN } });
     if (!admin) {
       throw new NotFoundException('No admin user found.');
     }

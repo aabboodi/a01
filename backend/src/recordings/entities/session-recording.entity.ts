@@ -7,7 +7,7 @@ import {
   JoinColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Class } from '../classes/entities/class.entity';
+import { Class } from '../../classes/entities/class.entity';
 
 @Entity('session_recordings')
 export class SessionRecording {
