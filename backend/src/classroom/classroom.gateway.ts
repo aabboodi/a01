@@ -10,7 +10,7 @@ import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
 import { MediasoupService } from '../mediasoup/mediasoup.service';
-import { Router } from 'mediasoup/node/lib/router';
+import * as mediasoup from 'mediasoup';
 import { RedisService } from '../redis/redis.service';
 import Redis from 'ioredis';
 
@@ -23,7 +23,7 @@ export class ClassroomGateway {
   @WebSocketServer()
   server: Server;
 
-  private readonly rooms = new Map<string, Router>();
+  private readonly rooms = new Map<string, mediasoup.types.Router>();
   private readonly transports = new Map<string, any>();
   private readonly producers = new Map<string, any>();
   private readonly redisClient: Redis;

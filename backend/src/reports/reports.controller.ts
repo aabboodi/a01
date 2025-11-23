@@ -3,7 +3,7 @@ import { ReportsService } from './reports.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { Response } from 'express';
+import type { Response } from 'express';
 
 @UseGuards(RolesGuard)
 @Controller('reports')
