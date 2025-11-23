@@ -190,29 +190,40 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
     }
 
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('الاسم الثلاثي')),
-          DataColumn(label: Text('الكود')),
-          DataColumn(label: Text('رقم الهاتف')),
-          DataColumn(label: Text('إجراء')),
-        ],
-        rows: _filteredStudents.map((student) {
-          final bool isNew = student['created_at'] != null &&
-                             DateTime.now().difference(DateTime.parse(student['created_at'])).inDays <= 7;
-          final color = isNew ? Colors.green : Colors.red;
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('الاسم الكامل')),
+            DataColumn(label: Text('كود الدخول')),
+            DataColumn(label: Text('تاريخ الإنشاء')),
+            DataColumn(label: Text('إجراءات')),
+          ],
+          rows: _filteredStudents.map((student) {
+            final createdAt = student['created_at'] != null
+                ? DateTime.parse(student['created_at'])
+                : null;
+            final isNew = createdAt != null && DateTime.now().difference(createdAt).inDays <= 7;
 
-          return DataRow(cells: [
-            DataCell(Text(student['full_name'], style: TextStyle(color: color))),
-            DataCell(Text(student['login_code'])),
-            DataCell(Text(student['phone_number'] ?? 'N/A')),
-            DataCell(IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteStudent(student['user_id'], student['full_name']),
-            )),
-          ]);
-        }).toList(),
+            return DataRow(
+              cells: [
+                DataCell(
+                  Text(
+                    student['full_name'],
+                    style: TextStyle(color: isNew ? Colors.green : Colors.black),
+                  ),
+                ),
+                DataCell(Text(student['login_code'])),
+                DataCell(Text(createdAt != null ? '${createdAt.year}-${createdAt.month}-${createdAt.day}' : 'N/A')),
+                DataCell(IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _deleteStudent(student['user_id'], student['full_name']),
+                )),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }

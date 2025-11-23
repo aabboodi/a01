@@ -10,17 +10,48 @@ class ManageTeachersScreen extends StatefulWidget {
 
 class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
   final UserService _userService = UserService();
-  Future<List<dynamic>>? _teachersFuture;
+  final TextEditingController _searchController = TextEditingController();
+
+  List<dynamic> _allTeachers = [];
+  List<dynamic> _filteredTeachers = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     _loadTeachers();
+    _searchController.addListener(_filterTeachers);
   }
 
-  void _loadTeachers() {
+  Future<void> _loadTeachers() async {
     setState(() {
-      _teachersFuture = _userService.getUsersByRole('teacher');
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final teachers = await _userService.getUsersByRole('teacher');
+      setState(() {
+        _allTeachers = teachers;
+        _filteredTeachers = teachers;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _filterTeachers() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredTeachers = _allTeachers.where((teacher) {
+        final name = teacher['full_name'].toString().toLowerCase();
+        final code = teacher['login_code'].toString().toLowerCase();
+        return name.contains(query) || code.contains(query);
+      }).toList();
     });
   }
 
@@ -109,45 +140,89 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة المدرسين'),
       ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _teachersFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('خطأ: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('لا يوجد مدرسين لعرضهم.'));
-          }
-
-          final teachers = snapshot.data!;
-          return ListView.builder(
-            itemCount: teachers.length,
-            itemBuilder: (context, index) {
-              final teacher = teachers[index];
-              return ListTile(
-                title: Text(teacher['full_name']),
-                subtitle: Text('Code: ${teacher['login_code']}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _deleteTeacher(teacher['user_id'], teacher['full_name']),
-                ),
-              );
-            },
-          );
-        },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'بحث بالاسم أو الكود',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildTeacherTable(),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddTeacherDialog,
         tooltip: 'إضافة مدرس',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildTeacherTable() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('خطأ: $_error'));
+    }
+    if (_filteredTeachers.isEmpty) {
+      return const Center(child: Text('لا يوجد مدرسين لعرضهم.'));
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('الاسم الكامل')),
+            DataColumn(label: Text('كود الدخول')),
+            DataColumn(label: Text('تاريخ الإنشاء')),
+            DataColumn(label: Text('إجراءات')),
+          ],
+          rows: _filteredTeachers.map((teacher) {
+            final createdAt = teacher['created_at'] != null
+                ? DateTime.parse(teacher['created_at'])
+                : null;
+            final isNew = createdAt != null && DateTime.now().difference(createdAt).inDays <= 7;
+
+            return DataRow(
+              cells: [
+                DataCell(
+                  Text(
+                    teacher['full_name'],
+                    style: TextStyle(color: isNew ? Colors.green : Colors.black),
+                  ),
+                ),
+                DataCell(Text(teacher['login_code'])),
+                DataCell(Text(createdAt != null ? '${createdAt.year}-${createdAt.month}-${createdAt.day}' : 'N/A')),
+                DataCell(IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _deleteTeacher(teacher['user_id'], teacher['full_name']),
+                )),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
