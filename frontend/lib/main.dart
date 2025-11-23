@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       // Set the initial route to the login screen
-      home: const LoginScreen(),
+      home: LoginScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

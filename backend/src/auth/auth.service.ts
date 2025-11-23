@@ -19,7 +19,7 @@ export class AuthService {
     try {
       const user = await this.usersService.findOneByLoginCode(loginCode);
       const payload = {
-        userId: user.id,
+        userId: user.user_id,
         loginCode: user.login_code,
         role: user.role,
       };
