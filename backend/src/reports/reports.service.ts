@@ -45,6 +45,6 @@ export class ReportsService {
     worksheet.addRows(reportData);
 
     const buffer = await workbook.xlsx.writeBuffer();
-    return buffer as Buffer;
+    return buffer as unknown as Buffer;
   }
 }
