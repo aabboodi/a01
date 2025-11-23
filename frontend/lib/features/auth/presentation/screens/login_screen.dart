@@ -5,7 +5,10 @@ import 'package:frontend/features/teacher/teacher_dashboard.dart';
 import 'package:frontend/features/student/student_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final AuthService authService;
+
+  LoginScreen({super.key, AuthService? authService})
+      : authService = authService ?? AuthService();
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -13,7 +16,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _loginCodeController = TextEditingController();
-  final _authService = AuthService();
   bool _isLoading = false;
 
   Future<void> _login() async {
@@ -26,7 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final userData = await _authService.login(loginCode);
+      final userData = await widget.authService.login(loginCode);
       if (mounted) {
         _navigateToDashboard(userData['role'], userData);
       }
