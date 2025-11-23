@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { MediasoupService } from '../mediasoup/mediasoup.service';
 import * as mediasoup from 'mediasoup';
 import { RedisService } from '../redis/redis.service';
