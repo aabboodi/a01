@@ -6,8 +6,8 @@ import {
   JoinColumn,
   Unique,
 } from 'typeorm';
-import { User } from '../users/entities/user.entity';
-import { Class } from '../classes/entities/class.entity';
+import { User } from '../../users/entities/user.entity';
+import { Class } from '../../classes/entities/class.entity';
 
 @Entity('grades')
 @Unique(['student', 'class']) // Ensure one grade entry per student per class

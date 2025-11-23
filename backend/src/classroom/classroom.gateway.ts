@@ -10,7 +10,7 @@ import { ChatService } from '../chat/chat.service';
 import { UsersService } from '../users/users.service';
 import { ClassesService } from '../classes/classes.service';
 import { MediasoupService } from '../mediasoup/mediasoup.service';
-import { Router } from 'mediasoup/node/lib/Router';
+import { Router } from 'mediasoup/node/lib/router';
 import { RedisService } from '../redis/redis.service';
 import Redis from 'ioredis';
 
@@ -129,7 +129,7 @@ export class ClassroomGateway {
     @MessageBody() data: { classId: string; message: string; userId: string },
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    const user = await this.usersService.findById(data.userId);
+    const user = await this.usersService.findOneById(data.userId);
     const classEntity = await this.classesService.findOne(data.classId);
 
     if (user && classEntity) {
