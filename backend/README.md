@@ -25,6 +25,36 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Running the app with Docker
+
+This project is configured to run with Docker. This is the recommended way to run the application for development, as it sets up the required database (PostgreSQL) and cache (Redis) services automatically.
+
+**Prerequisites:**
+- Docker
+- Docker Compose
+
+**Steps:**
+
+1.  **Create an environment file:**
+    Copy the example environment file to create your own local configuration.
+    ```bash
+    cp .env.example .env
+    ```
+
+2.  **Build and start the services:**
+    This command will start the PostgreSQL and Redis containers in the background.
+    ```bash
+    docker-compose up -d
+    ```
+
+3.  **Install dependencies and run the application:**
+    ```bash
+    npm install
+    npm run start:dev
+    ```
+
+The application will be running on `http://localhost:3000`.
+
 ## Project setup
 
 ```bash
