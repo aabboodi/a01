@@ -4,6 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { RedisIoAdapter } from './redis/redis.io.adapter';
 
 async function bootstrap() {
+  console.log(`[DEBUG] DB_USERNAME: ${process.env.DB_USERNAME}`);
+  console.log(`[DEBUG] DB_PASSWORD: ${process.env.DB_PASSWORD}`);
   const app = await NestFactory.create(AppModule);
 
   const redisIoAdapter = new RedisIoAdapter();
