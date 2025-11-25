@@ -4,7 +4,6 @@ import 'package:frontend/features/admin/manage_students_screen.dart';
 import 'package:frontend/features/admin/manage_classes_screen.dart';
 import 'package:frontend/features/admin/archive_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
-import 'package:frontend/features/auth/application/services/class_service.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/features/admin/admin_dashboard_provider.dart';
 import 'package:frontend/features/admin/class_provider.dart';
@@ -47,7 +46,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 children: [
                   const DrawerHeader(
                     decoration: BoxDecoration(color: Colors.blue),
-                    child: Text('القائمة', style: TextStyle(color: Colors.white, fontSize: 24)),
+                    child: Text('القائمة',
+                        style: TextStyle(color: Colors.white, fontSize: 24)),
                   ),
                   ListTile(
                     leading: const Icon(Icons.school),
@@ -107,7 +107,9 @@ class _ClassSelectionScreen extends StatelessWidget {
               case ClassListState.loading:
                 return const Center(child: CircularProgressIndicator());
               case ClassListState.error:
-                return Center(child: Text(provider.errorMessage ?? 'An unknown error occurred.'));
+                return Center(
+                    child: Text(
+                        provider.errorMessage ?? 'An unknown error occurred.'));
               case ClassListState.loaded:
                 if (provider.classes.isEmpty) {
                   return const Center(child: Text('No classes found.'));
@@ -121,7 +123,8 @@ class _ClassSelectionScreen extends StatelessWidget {
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => ArchiveScreen(classData: classData),
+                            builder: (context) =>
+                                ArchiveScreen(classData: classData),
                           ),
                         );
                       },
