@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -11,11 +10,11 @@ class WhiteboardWidget extends StatefulWidget {
   final bool isTeacher;
 
   const WhiteboardWidget({
-    Key? key,
+    super.key,
     required this.socket,
     required this.classId,
     required this.isTeacher,
-  }) : super(key: key);
+  });
 
   @override
   _WhiteboardWidgetState createState() => _WhiteboardWidgetState();
@@ -24,8 +23,8 @@ class WhiteboardWidget extends StatefulWidget {
 class _WhiteboardWidgetState extends State<WhiteboardWidget> {
   final List<DrawingLine> _lines = [];
   DrawingLine? _currentLine;
-  Color _currentColor = Colors.black;
-  double _currentStrokeWidth = 4.0;
+  final Color _currentColor = Colors.black;
+  final double _currentStrokeWidth = 4.0;
 
   @override
   void initState() {
@@ -50,7 +49,8 @@ class _WhiteboardWidgetState extends State<WhiteboardWidget> {
               final List<dynamic> pointsData = eventData['points'];
               final Offset startPoint = Offset(pointsData[0], pointsData[1]);
               final int colorValue = eventData['color'];
-              final double strokeWidth = (eventData['strokeWidth'] as num).toDouble();
+              final double strokeWidth =
+                  (eventData['strokeWidth'] as num).toDouble();
 
               _lines.add(DrawingLine(
                 color: Color(colorValue),
