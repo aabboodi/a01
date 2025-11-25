@@ -27,6 +27,6 @@ export class Enrollment {
   @Column({ type: 'boolean', default: true })
   is_new: boolean;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   enrolled_at: Date;
 }

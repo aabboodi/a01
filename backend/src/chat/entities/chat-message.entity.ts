@@ -25,6 +25,6 @@ export class ChatMessage {
   @JoinColumn({ name: 'class_id' })
   class: Class;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 }

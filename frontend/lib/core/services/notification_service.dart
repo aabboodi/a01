@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class NotificationService {
@@ -17,8 +18,7 @@ class NotificationService {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('User granted permission');
-    } else if (settings.authorizationStatus ==
-        AuthorizationStatus.provisional) {
+    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
       print('User granted provisional permission');
     } else {
       print('User declined or has not accepted permission');
@@ -42,9 +42,9 @@ class NotificationService {
     });
 
     // Handle messages when the app is opened from a terminated state
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       print('A new onMessageOpenedApp event was published!');
-      // Navigate to a specific screen based on the message content
+       // Navigate to a specific screen based on the message content
     });
   }
 }
