@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:frontend/core/constants/api_constants.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthService {
-  final String _baseUrl = 'http://10.0.2.2:3000';
+  final String _baseUrl = baseUrl;
   final _storage = const FlutterSecureStorage();
 
   Future<Map<String, dynamic>> login(String loginCode) async {

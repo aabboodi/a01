@@ -1,3 +1,4 @@
+import 'package:frontend/core/constants/api_constants.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class ClassroomService {
@@ -27,7 +28,7 @@ class ClassroomService {
   });
 
   void connectAndJoin(String classId, String userId, String fullName) {
-    socket = IO.io('http://10.0.2.2:3000', <String, dynamic>{
+    socket = IO.io(baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });
