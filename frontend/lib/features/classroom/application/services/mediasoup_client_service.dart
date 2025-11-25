@@ -1,6 +1,4 @@
 import 'package:mediasfu_mediasoup_client/mediasfu_mediasoup_client.dart';
-import 'package:mediasfu_mediasoup_client/src/transport.dart';
-import 'package:mediasfu_mediasoup_client/src/transport.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'dart:async';
 
@@ -23,29 +21,39 @@ class MediasoupClientService {
 
   Future<void> createSendTransport(IO.Socket socket, String classId) async {
     final completer = Completer<void>();
-    socket.emitWithAck('create-transport', {'classId': classId, 'isProducer': true}, ack: (data) async {
+    socket.emitWithAck(
+        'create-transport', {'classId': classId, 'isProducer': true},
+        ack: (data) async {
       sendTransport = device.createSendTransport(
         id: data['id'],
         iceParameters: data['iceParameters'],
-        iceCandidates: List<IceCandidate>.from(data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
+        iceCandidates: List<IceCandidate>.from(
+            data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
         dtlsParameters: data['dtlsParameters'],
       );
 
       sendTransport!.on('connect', (dtlsParameters, callback, errback) {
-        socket.emitWithAck('connect-transport', {
-          'classId': classId,
-          'transportId': sendTransport!.id,
-          'dtlsParameters': dtlsParameters.toMap(),
-        }, ack: (_) => callback());
+        socket.emitWithAck(
+            'connect-transport',
+            {
+              'classId': classId,
+              'transportId': sendTransport!.id,
+              'dtlsParameters': dtlsParameters.toMap(),
+            },
+            ack: (_) => callback());
       });
 
-      sendTransport!.on('produce', (kind, rtpParameters, callback, errback) async {
-        socket.emitWithAck('produce', {
-          'classId': classId,
-          'transportId': sendTransport!.id,
-          'kind': kind,
-          'rtpParameters': rtpParameters,
-        }, ack: (producerId) => callback(producerId));
+      sendTransport!.on('produce',
+          (kind, rtpParameters, callback, errback) async {
+        socket.emitWithAck(
+            'produce',
+            {
+              'classId': classId,
+              'transportId': sendTransport!.id,
+              'kind': kind,
+              'rtpParameters': rtpParameters,
+            },
+            ack: (producerId) => callback(producerId));
       });
 
       sendTransport!.on('newproducer', (producer) {
@@ -63,20 +71,26 @@ class MediasoupClientService {
 
   Future<void> createRecvTransport(IO.Socket socket, String classId) async {
     final completer = Completer<void>();
-    socket.emitWithAck('create-transport', {'classId': classId, 'isProducer': false}, ack: (data) {
+    socket.emitWithAck(
+        'create-transport', {'classId': classId, 'isProducer': false},
+        ack: (data) {
       recvTransport = device.createRecvTransport(
         id: data['id'],
         iceParameters: data['iceParameters'],
-        iceCandidates: List<IceCandidate>.from(data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
+        iceCandidates: List<IceCandidate>.from(
+            data['iceCandidates'].map((c) => IceCandidate.fromMap(c))),
         dtlsParameters: data['dtlsParameters'],
       );
 
       recvTransport!.on('connect', (dtlsParameters, callback, errback) {
-        socket.emitWithAck('connect-transport', {
-          'classId': classId,
-          'transportId': recvTransport!.id,
-          'dtlsParameters': dtlsParameters.toMap(),
-        }, ack: (_) => callback());
+        socket.emitWithAck(
+            'connect-transport',
+            {
+              'classId': classId,
+              'transportId': recvTransport!.id,
+              'dtlsParameters': dtlsParameters.toMap(),
+            },
+            ack: (_) => callback());
       });
 
       completer.complete();
