@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'package:frontend/core/constants/api_constants.dart';
 import 'package:http/http.dart' as http;
 
 class UserService {
-  final String _baseUrl = 'http://10.0.2.2:3000'; // For Android emulator
+  final String _baseUrl = baseUrl; // For Android emulator
 
   Future<List<dynamic>> getUsersByRole(String role) async {
     final url = Uri.parse('$_baseUrl/users?role=$role');
