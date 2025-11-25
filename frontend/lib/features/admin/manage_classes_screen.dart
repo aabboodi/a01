@@ -106,29 +106,33 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Enroll Students'),
-          content: FutureBuilder<List<dynamic>>(
-            future: _userService.getUsersByRole('student'),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const CircularProgressIndicator();
-              return SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  children: snapshot.data!.map((student) {
-                    return CheckboxListTile(
-                      title: Text(student['full_name']),
-                      value: selectedStudentIds.contains(student['user_id']),
-                      onChanged: (bool? value) {
-                        setState(() {
-                          if (value == true) {
-                            selectedStudentIds.add(student['user_id']);
-                          } else {
-                            selectedStudentIds.remove(student['user_id']);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setState) {
+              return FutureBuilder<List<dynamic>>(
+                future: _userService.getUsersByRole('student'),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const CircularProgressIndicator();
+                  return SizedBox(
+                    width: double.maxFinite,
+                    child: ListView(
+                      children: snapshot.data!.map((student) {
+                        return CheckboxListTile(
+                          title: Text(student['full_name']),
+                          value: selectedStudentIds.contains(student['user_id']),
+                          onChanged: (bool? value) {
+                            setState(() {
+                              if (value == true) {
+                                selectedStudentIds.add(student['user_id']);
+                              } else {
+                                selectedStudentIds.remove(student['user_id']);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
               );
             },
           ),
