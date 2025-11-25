@@ -18,10 +18,10 @@ export class SessionRecording {
   @JoinColumn({ name: 'class_id' })
   class: Class;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   start_time: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   end_time: Date | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
