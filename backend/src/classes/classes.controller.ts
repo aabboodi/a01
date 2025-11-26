@@ -26,6 +26,11 @@ export class ClassesController {
     return this.classesService.enrollStudents(id, enrollStudentsDto.student_ids);
   }
 
+  @Get('student/:studentId')
+  findClassesByStudent(@Param('studentId', ParseUUIDPipe) studentId: string) {
+    return this.classesService.findClassesByStudent(studentId);
+  }
+
   @Get(':id/students')
   findStudentsByClass(@Param('id', ParseUUIDPipe) id: string) {
     return this.classesService.findStudentsByClass(id);
