@@ -106,29 +106,33 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Enroll Students'),
-          content: FutureBuilder<List<dynamic>>(
-            future: _userService.getUsersByRole('student'),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const CircularProgressIndicator();
-              return SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  children: snapshot.data!.map((student) {
-                    return CheckboxListTile(
-                      title: Text(student['full_name']),
-                      value: selectedStudentIds.contains(student['user_id']),
-                      onChanged: (bool? value) {
-                        setState(() {
-                          if (value == true) {
-                            selectedStudentIds.add(student['user_id']);
-                          } else {
-                            selectedStudentIds.remove(student['user_id']);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setState) {
+              return FutureBuilder<List<dynamic>>(
+                future: _userService.getUsersByRole('student'),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const CircularProgressIndicator();
+                  return SizedBox(
+                    width: double.maxFinite,
+                    child: ListView(
+                      children: snapshot.data!.map((student) {
+                        return CheckboxListTile(
+                          title: Text(student['full_name']),
+                          value: selectedStudentIds.contains(student['user_id']),
+                          onChanged: (bool? value) {
+                            setState(() {
+                              if (value == true) {
+                                selectedStudentIds.add(student['user_id']);
+                              } else {
+                                selectedStudentIds.remove(student['user_id']);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -162,22 +166,34 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           final classes = snapshot.data ?? [];
-          return ListView.builder(
-            itemCount: classes.length,
-            itemBuilder: (context, index) {
-              final classData = classes[index];
-              return ListTile(
-                title: Text(classData['class_name']),
-                subtitle: Text('Teacher: ${classData['teacher']?['full_name'] ?? 'N/A'}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(icon: const Icon(Icons.person_add), onPressed: () => _showEnrollDialog(classData['class_id'])),
-                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteClass(classData['class_id'], classData['class_name'])),
-                  ],
-                ),
-              );
-            },
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('اسم الصف')),
+                DataColumn(label: Text('المدرس')),
+                DataColumn(label: Text('إجراءات')),
+              ],
+              rows: classes.map((classData) {
+                return DataRow(cells: [
+                  DataCell(Text(classData['class_name'])),
+                  DataCell(
+                      Text(classData['teacher']?['full_name'] ?? 'N/A')),
+                  DataCell(Row(
+                    children: [
+                      IconButton(
+                          icon: const Icon(Icons.person_add),
+                          onPressed: () =>
+                              _showEnrollDialog(classData['class_id'])),
+                      IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteClass(
+                              classData['class_id'], classData['class_name'])),
+                    ],
+                  )),
+                ]);
+              }).toList(),
+            ),
           );
         },
       ),
