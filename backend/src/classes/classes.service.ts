@@ -54,20 +54,34 @@ export class ClassesService {
       throw new NotFoundException(`Class with ID ${classId} not found.`);
     }
 
-    for (const studentId of studentIds) {
+    // Fetch all current enrollments for the class
+    const currentEnrollments = await this.enrollmentRepository.find({
+      where: { class: { class_id: classId } },
+      relations: ['student'],
+    });
+    const currentStudentIds = currentEnrollments.map(e => e.student.user_id);
+
+    // Students to add: in the new list but not in the current list
+    const studentsToAdd = studentIds.filter(id => !currentStudentIds.includes(id));
+
+    // Enrollments to remove: in the current list but not in the new list
+    const enrollmentsToRemove = currentEnrollments.filter(e => !studentIds.includes(e.student.user_id));
+
+    // Perform additions
+    for (const studentId of studentsToAdd) {
       const student = await this.usersService.findOneById(studentId);
       if (student.role !== UserRole.STUDENT) {
-        throw new BadRequestException(`User with ID ${studentId} is not a student.`);
+        // Optionally, you can decide to throw an error or just skip.
+        // For robustness, we'll skip non-student users.
+        continue;
       }
+      const enrollment = this.enrollmentRepository.create({ class: classEntity, student });
+      await this.enrollmentRepository.save(enrollment);
+    }
 
-      const existingEnrollment = await this.enrollmentRepository.findOne({
-        where: { class: { class_id: classId }, student: { user_id: studentId } },
-      });
-
-      if (!existingEnrollment) {
-        const enrollment = this.enrollmentRepository.create({ class: classEntity, student });
-        await this.enrollmentRepository.save(enrollment);
-      }
+    // Perform removals
+    if (enrollmentsToRemove.length > 0) {
+      await this.enrollmentRepository.remove(enrollmentsToRemove);
     }
   }
 

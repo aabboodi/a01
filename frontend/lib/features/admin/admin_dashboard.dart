@@ -4,6 +4,7 @@ import 'package:frontend/features/admin/manage_students_screen.dart';
 import 'package:frontend/features/admin/manage_classes_screen.dart';
 import 'package:frontend/features/admin/archive_screen.dart';
 import 'package:frontend/features/auth/presentation/screens/login_screen.dart';
+import 'package:frontend/features/admin/admin_home_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/features/admin/admin_dashboard_provider.dart';
 import 'package:frontend/features/admin/class_provider.dart';
@@ -48,6 +49,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     decoration: BoxDecoration(color: Colors.blue),
                     child: Text('القائمة',
                         style: TextStyle(color: Colors.white, fontSize: 24)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.home),
+                    title: const Text('الرئيسية'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      provider.navigateTo(AdminHomeScreen());
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.school),
