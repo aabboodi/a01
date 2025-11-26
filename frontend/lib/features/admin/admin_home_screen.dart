@@ -60,7 +60,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             children: [
               Text(
                 'ملخص النظام',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               GridView.count(
@@ -76,21 +79,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     stats['students']!,
                     Icons.person,
                     Colors.blue,
-                    () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageStudentsScreen())),
+                    () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const ManageStudentsScreen())),
                   ),
                   _buildStatCard(
                     'إدارة المدرسين',
                     stats['teachers']!,
                     Icons.school,
                     Colors.orange,
-                    () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageTeachersScreen())),
+                    () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const ManageTeachersScreen())),
                   ),
                   _buildStatCard(
                     'إدارة الصفوف',
                     stats['classes']!,
                     Icons.class_,
                     Colors.green,
-                    () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageClassesScreen())),
+                    () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const ManageClassesScreen())),
                   ),
                 ],
               ),
@@ -101,7 +107,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, int count, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildStatCard(
+      String title, int count, IconData icon, Color color, VoidCallback onTap) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -121,10 +128,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               const SizedBox(height: 8),
               Text(
                 count.toString(),
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+                style: TextStyle(
+                    fontSize: 24, fontWeight: FontWeight.bold, color: color),
               ),
               const SizedBox(height: 4),
-              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
