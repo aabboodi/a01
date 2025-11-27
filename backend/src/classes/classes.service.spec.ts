@@ -31,6 +31,8 @@ describe('ClassesService', () => {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(), // Add the missing find mock
+    remove: jest.fn(), // Add remove for synchronization logic
     delete: jest.fn(),
   };
 
@@ -82,22 +84,57 @@ describe('ClassesService', () => {
   });
 
   describe('enrollStudents', () => {
-    it('should enroll students successfully', async () => {
-        mockClassRepository.findOneBy.mockResolvedValue(mockClass);
-        (usersService.findOneById as jest.Mock).mockResolvedValue(mockStudent);
-        mockEnrollmentRepository.findOne.mockResolvedValue(null); // Not already enrolled
-        mockEnrollmentRepository.create.mockReturnValue({ class: mockClass, student: mockStudent });
-
-        await service.enrollStudents('class-uuid', ['student-uuid']);
-
-        expect(mockEnrollmentRepository.save).toHaveBeenCalled();
+    beforeEach(() => {
+      // Reset mocks before each test in this describe block
+      jest.clearAllMocks();
+      mockClassRepository.findOneBy.mockResolvedValue(mockClass);
     });
 
-    it('should throw BadRequestException if a user is not a student', async () => {
-        mockClassRepository.findOneBy.mockResolvedValue(mockClass);
-        (usersService.findOneById as jest.Mock).mockResolvedValue(mockTeacher); // User is a teacher
+    it('should add new students', async () => {
+      const newStudent: User = { user_id: 'new-student-uuid', full_name: 'New Student', login_code: 's2', role: UserRole.STUDENT, created_at: new Date(), phone_number: '' };
+      mockEnrollmentRepository.find.mockResolvedValue([]); // No current enrollments
+      (usersService.findOneById as jest.Mock).mockResolvedValue(newStudent);
+      mockEnrollmentRepository.create.mockReturnValue({ class: mockClass, student: newStudent });
 
-        await expect(service.enrollStudents('class-uuid', ['teacher-uuid'])).rejects.toThrow(BadRequestException);
+      await service.enrollStudents('class-uuid', ['new-student-uuid']);
+
+      expect(mockEnrollmentRepository.save).toHaveBeenCalledWith({ class: mockClass, student: newStudent });
+      expect(mockEnrollmentRepository.remove).not.toHaveBeenCalled();
+    });
+
+    it('should remove students who are no longer in the list', async () => {
+      const existingEnrollment = { class: mockClass, student: mockStudent };
+      mockEnrollmentRepository.find.mockResolvedValue([existingEnrollment]); // Currently enrolled
+
+      await service.enrollStudents('class-uuid', []); // Empty list means unenroll all
+
+      expect(mockEnrollmentRepository.remove).toHaveBeenCalledWith([existingEnrollment]);
+      expect(mockEnrollmentRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should synchronize enrollments (add and remove)', async () => {
+      const studentToRemove: User = { user_id: 'student-to-remove-uuid', full_name: 'Remove Me', login_code: 's3', role: UserRole.STUDENT, created_at: new Date(), phone_number: '' };
+      const studentToAdd: User = { user_id: 'student-to-add-uuid', full_name: 'Add Me', login_code: 's4', role: UserRole.STUDENT, created_at: new Date(), phone_number: '' };
+      const enrollmentToRemove = { class: mockClass, student: studentToRemove };
+
+      mockEnrollmentRepository.find.mockResolvedValue([enrollmentToRemove]); // One student is currently enrolled
+      (usersService.findOneById as jest.Mock).mockResolvedValue(studentToAdd);
+      mockEnrollmentRepository.create.mockReturnValue({ class: mockClass, student: studentToAdd });
+
+      await service.enrollStudents('class-uuid', ['student-to-add-uuid']); // New list has one different student
+
+      expect(mockEnrollmentRepository.save).toHaveBeenCalledWith({ class: mockClass, student: studentToAdd });
+      expect(mockEnrollmentRepository.remove).toHaveBeenCalledWith([enrollmentToRemove]);
+    });
+
+    it('should not throw an error if a user to enroll is not a student', async () => {
+      mockEnrollmentRepository.find.mockResolvedValue([]);
+      (usersService.findOneById as jest.Mock).mockResolvedValue(mockTeacher); // Try to add a teacher
+
+      // This should complete without throwing an error
+      await service.enrollStudents('class-uuid', ['teacher-uuid']);
+
+      expect(mockEnrollmentRepository.save).not.toHaveBeenCalled();
     });
   });
 

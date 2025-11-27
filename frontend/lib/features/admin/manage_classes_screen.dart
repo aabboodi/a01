@@ -33,8 +33,12 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
         title: const Text('Confirm Deletion'),
         content: Text('Are you sure you want to delete $className?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete')),
         ],
       ),
     );
@@ -44,7 +48,8 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
         await _classService.deleteClass(classId);
         _loadClasses();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -61,15 +66,19 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Class Name')),
+              TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Class Name')),
               FutureBuilder<List<dynamic>>(
                 future: _userService.getUsersByRole('teacher'),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const CircularProgressIndicator();
+                  if (!snapshot.hasData)
+                    return const CircularProgressIndicator();
                   return DropdownButtonFormField<String>(
                     hint: const Text('Select Teacher'),
                     onChanged: (value) => selectedTeacherId = value,
-                    items: snapshot.data!.map<DropdownMenuItem<String>>((teacher) {
+                    items:
+                        snapshot.data!.map<DropdownMenuItem<String>>((teacher) {
                       return DropdownMenuItem<String>(
                         value: teacher['user_id'],
                         child: Text(teacher['full_name']),
@@ -81,11 +90,15 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isNotEmpty && selectedTeacherId != null) {
-                  await _classService.createClass(nameController.text, selectedTeacherId!);
+                if (nameController.text.isNotEmpty &&
+                    selectedTeacherId != null) {
+                  await _classService.createClass(
+                      nameController.text, selectedTeacherId!);
                   Navigator.pop(context);
                   _loadClasses();
                 }
@@ -149,8 +162,10 @@ class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
     setState(() => _isLoading = true);
     try {
       final allStudents = await widget.userService.getUsersByRole('student');
-      final enrolledStudents = await widget.classService.getEnrolledStudents(widget.classId);
-      final enrolledIds = enrolledStudents.map((s) => s['user_id'] as String).toList();
+      final enrolledStudents =
+          await widget.classService.getEnrolledStudents(widget.classId);
+      final enrolledIds =
+          enrolledStudents.map((s) => s['user_id'] as String).toList();
       setState(() {
         _allStudents = allStudents;
         _filteredStudents = allStudents;
@@ -202,7 +217,8 @@ class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
                       itemCount: _filteredStudents.length,
                       itemBuilder: (context, index) {
                         final student = _filteredStudents[index];
-                        final isSelected = _selectedStudentIds.contains(student['user_id']);
+                        final isSelected =
+                            _selectedStudentIds.contains(student['user_id']);
                         return CheckboxListTile(
                           title: Text(student['full_name']),
                           subtitle: Text(student['login_code']),
@@ -224,11 +240,14 @@ class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(
           onPressed: () async {
             try {
-              await widget.classService.enrollStudents(widget.classId, _selectedStudentIds);
+              await widget.classService
+                  .enrollStudents(widget.classId, _selectedStudentIds);
               Navigator.pop(context);
               widget.onEnrollmentComplete();
             } catch (e) {
@@ -255,22 +274,33 @@ class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           final classes = snapshot.data ?? [];
-          return ListView.builder(
-            itemCount: classes.length,
-            itemBuilder: (context, index) {
-              final classData = classes[index];
-              return ListTile(
-                title: Text(classData['class_name']),
-                subtitle: Text('Teacher: ${classData['teacher']?['full_name'] ?? 'N/A'}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(icon: const Icon(Icons.person_add), onPressed: () => _showEnrollDialog(classData['class_id'])),
-                    IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteClass(classData['class_id'], classData['class_name'])),
-                  ],
-                ),
-              );
-            },
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('اسم الصف')),
+                DataColumn(label: Text('المدرس')),
+                DataColumn(label: Text('إجراءات')),
+              ],
+              rows: classes.map((classData) {
+                return DataRow(cells: [
+                  DataCell(Text(classData['class_name'])),
+                  DataCell(Text(classData['teacher']?['full_name'] ?? 'N/A')),
+                  DataCell(Row(
+                    children: [
+                      IconButton(
+                          icon: const Icon(Icons.person_add),
+                          onPressed: () =>
+                              _showEnrollDialog(classData['class_id'])),
+                      IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteClass(
+                              classData['class_id'], classData['class_name'])),
+                    ],
+                  )),
+                ]);
+              }).toList(),
+            ),
           );
         },
       ),
