@@ -83,8 +83,15 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
 
   Future<void> _showAddStudentDialog() async {
     final formKey = GlobalKey<FormState>();
-    final fullNameController = TextEditingController();
-    final loginCodeController = TextEditingController();
+    final controllers = {
+      'full_name': TextEditingController(),
+      'login_code': TextEditingController(),
+      'phone_number': TextEditingController(),
+      'age': TextEditingController(),
+      'education_level': TextEditingController(),
+      'address': TextEditingController(),
+      'father_phone_number': TextEditingController(),
+    };
 
     return showDialog<void>(
       context: context,
@@ -93,20 +100,43 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
           title: const Text('إضافة طالب جديد'),
           content: Form(
             key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                TextFormField(
-                  controller: fullNameController,
-                  decoration: const InputDecoration(labelText: 'الاسم الكامل'),
-                  validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
-                ),
-                TextFormField(
-                  controller: loginCodeController,
-                  decoration: const InputDecoration(labelText: 'كود الدخول'),
-                  validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
-                ),
-              ],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  TextFormField(
+                    controller: controllers['full_name'],
+                    decoration: const InputDecoration(labelText: 'الاسم الكامل'),
+                    validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
+                  ),
+                  TextFormField(
+                    controller: controllers['login_code'],
+                    decoration: const InputDecoration(labelText: 'كود الدخول'),
+                    validator: (value) => value!.isEmpty ? 'الحقل مطلوب' : null,
+                  ),
+                  TextFormField(
+                    controller: controllers['phone_number'],
+                    decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+                  ),
+                  TextFormField(
+                    controller: controllers['age'],
+                    decoration: const InputDecoration(labelText: 'العمر'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextFormField(
+                    controller: controllers['education_level'],
+                    decoration: const InputDecoration(labelText: 'المستوى التعليمي'),
+                  ),
+                  TextFormField(
+                    controller: controllers['address'],
+                    decoration: const InputDecoration(labelText: 'العنوان'),
+                  ),
+                  TextFormField(
+                    controller: controllers['father_phone_number'],
+                    decoration: const InputDecoration(labelText: 'رقم هاتف ولي الأمر'),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: <Widget>[
@@ -119,11 +149,20 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   try {
-                    await _userService.createUser(
-                      fullNameController.text,
-                      loginCodeController.text,
-                      'student',
-                    );
+                    final userData = {
+                      'full_name': controllers['full_name']!.text,
+                      'login_code': controllers['login_code']!.text,
+                      'phone_number': controllers['phone_number']!.text,
+                      'age': int.tryParse(controllers['age']!.text),
+                      'education_level': controllers['education_level']!.text,
+                      'address': controllers['address']!.text,
+                      'father_phone_number': controllers['father_phone_number']!.text,
+                      'role': 'student',
+                    };
+                    // Remove null or empty values
+                    userData.removeWhere((key, value) => value == null || (value is String && value.isEmpty));
+
+                    await _userService.createUser(userData);
                     Navigator.of(context).pop();
                     _loadStudents();
                   } catch (e) {
@@ -197,6 +236,9 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
           columns: const [
             DataColumn(label: Text('الاسم الكامل')),
             DataColumn(label: Text('كود الدخول')),
+            DataColumn(label: Text('الهاتف')),
+            DataColumn(label: Text('العمر')),
+            DataColumn(label: Text('المستوى التعليمي')),
             DataColumn(label: Text('تاريخ الإنشاء')),
             DataColumn(label: Text('إجراءات')),
           ],
@@ -214,7 +256,10 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                     style: TextStyle(color: isNew ? Colors.green : Colors.black),
                   ),
                 ),
-                DataCell(Text(student['login_code'])),
+                DataCell(Text(student['login_code'] ?? 'N/A')),
+                DataCell(Text(student['phone_number'] ?? 'N/A')),
+                DataCell(Text(student['age']?.toString() ?? 'N/A')),
+                DataCell(Text(student['education_level'] ?? 'N/A')),
                 DataCell(Text(createdAt != null ? '${createdAt.year}-${createdAt.month}-${createdAt.day}' : 'N/A')),
                 DataCell(IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),

@@ -79,6 +79,14 @@ export class ClassesService {
     return enrollments.map(e => e.student);
   }
 
+  async findClassesByStudent(studentId: string): Promise<Class[]> {
+    const enrollments = await this.enrollmentRepository.find({
+      where: { student: { user_id: studentId } },
+      relations: ['class', 'class.teacher'], // Eagerly load the class and its teacher
+    });
+    return enrollments.map(e => e.class);
+  }
+
   async removeClass(classId: string): Promise<void> {
     const classEntity = await this.classRepository.findOneBy({ class_id: classId });
     if (!classEntity) {
@@ -90,5 +98,13 @@ export class ClassesService {
 
     // Then, remove the class itself
     await this.classRepository.remove(classEntity);
+  }
+
+  async findEnrolledStudents(classId: string): Promise<any[]> {
+    const enrollments = await this.enrollmentRepository.find({
+      where: { class: { class_id: classId } },
+      relations: ['student'],
+    });
+    return enrollments.map(e => e.student);
   }
 }
