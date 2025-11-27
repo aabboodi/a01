@@ -113,4 +113,12 @@ export class ClassesService {
     // Then, remove the class itself
     await this.classRepository.remove(classEntity);
   }
+
+  async findEnrolledStudents(classId: string): Promise<any[]> {
+    const enrollments = await this.enrollmentRepository.find({
+      where: { class: { class_id: classId } },
+      relations: ['student'],
+    });
+    return enrollments.map(e => e.student);
+  }
 }

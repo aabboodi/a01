@@ -41,4 +41,9 @@ export class ClassesController {
   removeClass(@Param('id', ParseUUIDPipe) id: string) {
     return this.classesService.removeClass(id);
   }
+
+  @Get(':id/enrolled-students')
+  findEnrolledStudents(@Param('id', ParseUUIDPipe) id: string) {
+    return this.classesService.findEnrolledStudents(id);
+  }
 }

@@ -26,6 +26,18 @@ export class User {
   @Column({ nullable: true, length: 20 })
   phone_number: string;
 
+  @Column({ type: 'int', nullable: true })
+  age: number;
+
+  @Column({ length: 100, nullable: true })
+  education_level: string;
+
+  @Column({ length: 255, nullable: true })
+  address: string;
+
+  @Column({ length: 20, nullable: true })
+  father_phone_number: string;
+
   @CreateDateColumn()
   created_at: Date;
 }

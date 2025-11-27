@@ -27,6 +27,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   Widget build(BuildContext context) {
 <<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> db91d413c61a8bdfd5cfbff589dc489443652404
     return Scaffold(
       appBar: AppBar(
         title: const Text('لوحة تحكم المدير'),
@@ -37,6 +40,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             tooltip: 'تسجيل الخروج',
           ),
         ],
+<<<<<<< HEAD
+=======
 =======
     return ChangeNotifierProvider(
       create: (_) => AdminDashboardProvider(),
@@ -109,6 +114,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           );
         },
 >>>>>>> 42825131257bbb6730ec37d1c19196ece363f065
+>>>>>>> db91d413c61a8bdfd5cfbff589dc489443652404
       ),
       drawer: Drawer(
         child: ListView(
