@@ -26,6 +26,11 @@ export class ClassesController {
     return this.classesService.enrollStudents(id, enrollStudentsDto.student_ids);
   }
 
+  @Get('student/:studentId')
+  findClassesByStudent(@Param('studentId', ParseUUIDPipe) studentId: string) {
+    return this.classesService.findClassesByStudent(studentId);
+  }
+
   @Get(':id/students')
   findStudentsByClass(@Param('id', ParseUUIDPipe) id: string) {
     return this.classesService.findStudentsByClass(id);
@@ -35,5 +40,10 @@ export class ClassesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   removeClass(@Param('id', ParseUUIDPipe) id: string) {
     return this.classesService.removeClass(id);
+  }
+
+  @Get(':id/enrolled-students')
+  findEnrolledStudents(@Param('id', ParseUUIDPipe) id: string) {
+    return this.classesService.findEnrolledStudents(id);
   }
 }
