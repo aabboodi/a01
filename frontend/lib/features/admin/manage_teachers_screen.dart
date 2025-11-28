@@ -118,11 +118,11 @@ class _ManageTeachersScreenState extends State<ManageTeachersScreen> {
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
                   try {
-                    await _userService.createUser(
-                      fullNameController.text,
-                      loginCodeController.text,
-                      'teacher',
-                    );
+                    await _userService.createUser({
+                      'full_name': fullNameController.text,
+                      'login_code': loginCodeController.text,
+                      'role': 'teacher',
+                    });
                     Navigator.of(context).pop();
                     _loadTeachers();
                   } catch (e) {

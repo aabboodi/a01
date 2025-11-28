@@ -84,25 +84,33 @@ class ClassService {
 
   Future<List<dynamic>> getClassesForStudent(String studentId) async {
     final token = await _getAccessToken();
-    final url = Uri.parse('$_baseUrl/classes');
+    final url = Uri.parse('$_baseUrl/classes/student/$studentId'); // Use the new, efficient endpoint
 
     final response = await http.get(
       url,
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
     );
 
     if (response.statusCode == 200) {
-      final allClasses = json.decode(response.body) as List;
-      final studentClasses = allClasses.where((c) {
-        final students = c['students'] as List;
-        return students.any((s) => s['user_id'] == studentId);
-      }).toList();
-      return studentClasses;
+      return json.decode(response.body);
     } else {
       throw Exception('Failed to load classes for student.');
+    }
+  }
+
+  Future<List<dynamic>> getEnrolledStudents(String classId) async {
+    final token = await _getAccessToken();
+    final url = Uri.parse('$_baseUrl/classes/$classId/enrolled-students');
+    final response = await http.get(
+      url,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load enrolled students');
     }
   }
 }

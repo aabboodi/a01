@@ -99,50 +99,14 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
   }
 
   void _showEnrollDialog(String classId) {
-    List<String> selectedStudentIds = [];
-
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Enroll Students'),
-          content: FutureBuilder<List<dynamic>>(
-            future: _userService.getUsersByRole('student'),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const CircularProgressIndicator();
-              return SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  children: snapshot.data!.map((student) {
-                    return CheckboxListTile(
-                      title: Text(student['full_name']),
-                      value: selectedStudentIds.contains(student['user_id']),
-                      onChanged: (bool? value) {
-                        setState(() {
-                          if (value == true) {
-                            selectedStudentIds.add(student['user_id']);
-                          } else {
-                            selectedStudentIds.remove(student['user_id']);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                await _classService.enrollStudents(classId, selectedStudentIds);
-                Navigator.pop(context);
-                _loadClasses();
-              },
-              child: const Text('Enroll'),
-            ),
-          ],
+        return EnrollStudentDialog(
+          classId: classId,
+          userService: _userService,
+          classService: _classService,
+          onEnrollmentComplete: _loadClasses,
         );
       },
     );
@@ -185,6 +149,135 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
         onPressed: _showAddClassDialog,
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class EnrollStudentDialog extends StatefulWidget {
+  final String classId;
+  final UserService userService;
+  final ClassService classService;
+  final VoidCallback onEnrollmentComplete;
+
+  const EnrollStudentDialog({
+    super.key,
+    required this.classId,
+    required this.userService,
+    required this.classService,
+    required this.onEnrollmentComplete,
+  });
+
+  @override
+  State<EnrollStudentDialog> createState() => _EnrollStudentDialogState();
+}
+
+class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _allStudents = [];
+  List<dynamic> _filteredStudents = [];
+  List<String> _selectedStudentIds = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+    _searchController.addListener(_filterStudents);
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      final allStudents = await widget.userService.getUsersByRole('student');
+      final enrolledStudents = await widget.classService.getEnrolledStudents(widget.classId);
+      final enrolledIds = enrolledStudents.map((s) => s['user_id'] as String).toList();
+      setState(() {
+        _allStudents = allStudents;
+        _filteredStudents = allStudents;
+        _selectedStudentIds = enrolledIds;
+        _isLoading = false;
+      });
+    } catch (e) {
+      // Handle error
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _filterStudents() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredStudents = _allStudents.where((student) {
+        final name = student['full_name'].toString().toLowerCase();
+        final code = student['login_code'].toString().toLowerCase();
+        return name.contains(query) || code.contains(query);
+      }).toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Enroll Students'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'Search by name or code',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      itemCount: _filteredStudents.length,
+                      itemBuilder: (context, index) {
+                        final student = _filteredStudents[index];
+                        final isSelected = _selectedStudentIds.contains(student['user_id']);
+                        return CheckboxListTile(
+                          title: Text(student['full_name']),
+                          subtitle: Text(student['login_code']),
+                          value: isSelected,
+                          onChanged: (bool? value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedStudentIds.add(student['user_id']);
+                              } else {
+                                _selectedStudentIds.remove(student['user_id']);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () async {
+            try {
+              await widget.classService.enrollStudents(widget.classId, _selectedStudentIds);
+              Navigator.pop(context);
+              widget.onEnrollmentComplete();
+            } catch (e) {
+              // Handle error
+            }
+          },
+          child: const Text('Enroll'),
+        ),
+      ],
     );
   }
 }

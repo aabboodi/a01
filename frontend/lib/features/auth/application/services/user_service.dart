@@ -19,17 +19,16 @@ class UserService {
     }
   }
 
-  Future<Map<String, dynamic>> createUser(String fullName, String loginCode, String role) async {
+  Future<Map<String, dynamic>> createUser(Map<String, dynamic> userData) async {
     final url = Uri.parse('$_baseUrl/users');
     try {
+      // Ensure role is always set
+      userData.putIfAbsent('role', () => 'student');
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'full_name': fullName,
-          'login_code': loginCode,
-          'role': role,
-        }),
+        body: json.encode(userData),
       );
 
       if (response.statusCode == 201) {
