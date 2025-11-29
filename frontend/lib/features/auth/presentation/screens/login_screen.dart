@@ -25,14 +25,23 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    print('🔥🔥🔥 [LOGIN_SCREEN] Starting login with code: $loginCode');
     setState(() => _isLoading = true);
 
     try {
+      print('🔥🔥🔥 [LOGIN_SCREEN] Calling authService.login...');
       final userData = await widget.authService.login(loginCode);
+      print('🔥🔥🔥 [LOGIN_SCREEN] Login successful! UserData: $userData');
+      print('🔥🔥🔥 [LOGIN_SCREEN] Role extracted: ${userData['role']}');
+      
       if (mounted) {
+        print('🔥🔥🔥 [LOGIN_SCREEN] Navigating to dashboard for role: ${userData['role']}');
         _navigateToDashboard(userData['role'], userData);
+      } else {
+        print('🔥🔥🔥 [LOGIN_SCREEN] Widget not mounted, skipping navigation');
       }
     } catch (e) {
+      print('🔥🔥🔥 [LOGIN_SCREEN] Login failed with error: $e');
       _showError(e.toString());
     } finally {
       if (mounted) {
@@ -42,25 +51,32 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _navigateToDashboard(String role, Map<String, dynamic> userData) {
+    print('🔥🔥🔥 [NAVIGATION] _navigateToDashboard called with role: $role');
     Widget page;
     switch (role) {
       case 'admin':
+        print('🔥🔥🔥 [NAVIGATION] Matched admin role, creating AdminDashboard');
         page = const AdminDashboard();
         break;
       case 'teacher':
+        print('🔥🔥🔥 [NAVIGATION] Matched teacher role, creating TeacherDashboard');
         page = TeacherDashboard(userData: userData);
         break;
       case 'student':
+        print('🔥🔥🔥 [NAVIGATION] Matched student role, creating StudentDashboard');
         page = StudentDashboard(userData: userData);
         break;
       default:
+        print('🔥🔥🔥 [NAVIGATION] Unknown role: $role');
         _showError('دور المستخدم غير معروف: $role');
         return;
     }
 
+    print('🔥🔥🔥 [NAVIGATION] Pushing route to: ${page.runtimeType}');
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => page),
     );
+    print('🔥🔥🔥 [NAVIGATION] Navigation completed');
   }
 
   void _showError(String message) {
