@@ -6,7 +6,8 @@ import 'package:frontend/features/admin/admin_home_screen.dart'; // Import the n
 /// It holds the currently selected screen widget and provides a method
 /// to update it, notifying listeners of the change.
 class AdminDashboardProvider with ChangeNotifier {
-  Widget _selectedScreen = AdminHomeScreen(); // Set the new home screen as the default
+  Widget _selectedScreen =
+      const AdminHomeScreen(); // Set the new home screen as the default
 
   /// The currently selected screen to be displayed in the dashboard body.
   Widget get selectedScreen => _selectedScreen;
