@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/features/auth/application/services/class_service.dart';
-import 'package:frontend/core/services/class_cache_service.dart';
+import 'package:frontend/core/services/local_db_service.dart';
 
 enum ClassListState {
   loading,
@@ -10,7 +10,7 @@ enum ClassListState {
 
 class ClassProvider with ChangeNotifier {
   final ClassService _classService = ClassService();
-  final ClassCacheService _cacheService = ClassCacheService.instance;
+  final LocalDbService _localDbService = LocalDbService();
 
   List<dynamic> _classes = [];
   List<dynamic> get classes => _classes;
@@ -31,7 +31,7 @@ class ClassProvider with ChangeNotifier {
 
     try {
       // Step 1: Immediately load from cache
-      final cachedClasses = await _cacheService.getCachedClasses();
+      final cachedClasses = await _localDbService.getCachedClasses();
       if (cachedClasses.isNotEmpty) {
         _classes = cachedClasses;
         _state = ClassListState.loaded;
@@ -42,7 +42,7 @@ class ClassProvider with ChangeNotifier {
       final networkClasses = await _classService.getAllClasses();
 
       // Step 3: Update cache and notify listeners
-      await _cacheService.cacheClasses(networkClasses);
+      await _localDbService.cacheClasses(networkClasses);
       _classes = networkClasses;
       _state = ClassListState.loaded;
       notifyListeners();

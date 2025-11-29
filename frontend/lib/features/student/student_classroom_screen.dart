@@ -8,6 +8,10 @@ import 'package:frontend/features/classroom/presentation/screens/video_player_sc
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:frontend/features/chat/data/chat_repository.dart';
+import 'package:frontend/core/constants/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Data model for ChatMessage (assuming it's defined elsewhere or here)
 class ChatMessage {
@@ -84,9 +88,10 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     }
   }
 
+  final ChatRepository _chatRepository = ChatRepository();
+
   Future<void> _loadChatHistory() async {
-    try {
-      final history = await _apiChatService.getChatHistory(widget.classData['class_id']);
+    _chatRepository.getMessages(widget.classData['class_id']).listen((history) {
       final historicalMessages = history.map((msg) {
         final isSystem = msg['user']?['role'] == 'admin';
         final url = isSystem ? _extractUrl(msg['message']) : null;
@@ -102,13 +107,12 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
 
       if (mounted) {
         setState(() {
+          _chatMessages.clear(); // Clear existing to avoid duplicates when stream updates
           _chatMessages.addAll(historicalMessages);
         });
         _scrollToBottom();
       }
-    } catch (e) {
-      print("Failed to load chat history: $e");
-    }
+    });
   }
 
   void _setupClassroomService() {
@@ -289,7 +293,14 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.classData['class_name']),
-        actions: [_buildConnectionIndicator()],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.support_agent),
+            tooltip: 'تواصل عبر واتساب',
+            onPressed: _openWhatsApp,
+          ),
+          _buildConnectionIndicator(),
+        ],
       ),
       body: Column(
         children: [
@@ -324,6 +335,23 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
                         ),
                       ),
                     ),
+                  if (_connectionState != ConnectionState.active)
+                    Container(
+                      color: Colors.black.withOpacity(0.8),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.wifi_off, color: Colors.white, size: 48),
+                            const SizedBox(height: 16),
+                            Text(
+                              "جاري الاتصال...",
+                              style: GoogleFonts.cairo(color: Colors.white, fontSize: 18),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -334,8 +362,8 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
           ),
           Container(
             padding: const EdgeInsets.all(8.0),
-            color: Colors.blueGrey[100],
-            child: Text('حالة الخادم: $_serverMessage'),
+            color: AppTheme.beige,
+            child: Text('حالة الخادم: $_serverMessage', style: TextStyle(color: AppTheme.textDark)),
           ),
           _buildControls(),
         ],
@@ -402,9 +430,9 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
                 );
               }
               return ListTile(
-                title: Text(msg.authorName, style: TextStyle(fontWeight: FontWeight.bold, color: msg.isLocal ? Colors.blue : Colors.black)),
+                title: Text(msg.authorName, style: TextStyle(fontWeight: FontWeight.bold, color: msg.isLocal ? AppTheme.forestGreen : Colors.black)),
                 subtitle: Text(msg.message),
-                tileColor: msg.isLocal ? Colors.blue.withOpacity(0.05) : null,
+                tileColor: msg.isLocal ? AppTheme.forestGreen.withOpacity(0.1) : null,
               );
             },
           ),
@@ -436,7 +464,7 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
   Widget _buildControls() {
     return Container(
       padding: const EdgeInsets.all(16.0),
-      color: Colors.grey[200],
+      color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -477,5 +505,20 @@ class _StudentClassroomScreenState extends State<StudentClassroomScreen> {
         Text(label, style: TextStyle(color: onPressed != null ? Colors.black : Colors.grey)),
       ],
     );
+  }
+
+  Future<void> _openWhatsApp() async {
+    // Replace with actual support number
+    const phoneNumber = '+966500000000'; 
+    const message = 'مرحباً، أحتاج مساعدة في الفصل الدراسي.';
+    final url = Uri.parse('https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}');
+    
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكن فتح واتساب')),
+      );
+    }
   }
 }
