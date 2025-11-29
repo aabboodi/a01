@@ -26,10 +26,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> db91d413c61a8bdfd5cfbff589dc489443652404
     return Scaffold(
       appBar: AppBar(
         title: const Text('لوحة تحكم المدير'),
@@ -40,81 +36,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
             tooltip: 'تسجيل الخروج',
           ),
         ],
-<<<<<<< HEAD
-=======
-=======
-    return ChangeNotifierProvider(
-      create: (_) => AdminDashboardProvider(),
-      child: Consumer<AdminDashboardProvider>(
-        builder: (context, provider, child) {
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('لوحة تحكم المدير'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () => _logout(context),
-                  tooltip: 'تسجيل الخروج',
-                ),
-              ],
-            ),
-            drawer: Drawer(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  const DrawerHeader(
-                    decoration: BoxDecoration(color: Colors.blue),
-                    child: Text('القائمة',
-                        style: TextStyle(color: Colors.white, fontSize: 24)),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.home),
-                    title: const Text('الرئيسية'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      provider.navigateTo(AdminHomeScreen());
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.school),
-                    title: const Text('إدارة المدرسين'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      provider.navigateTo(const ManageTeachersScreen());
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.person),
-                    title: const Text('إدارة الطلاب'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      provider.navigateTo(const ManageStudentsScreen());
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.class_),
-                    title: const Text('إدارة الصفوف'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      provider.navigateTo(const ManageClassesScreen());
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.archive),
-                    title: const Text('الأرشيف'),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      provider.navigateTo(const _ClassSelectionScreen());
-                    },
-                  ),
-                ],
-              ),
-            ),
-            body: provider.selectedScreen,
-          );
-        },
->>>>>>> 42825131257bbb6730ec37d1c19196ece363f065
->>>>>>> db91d413c61a8bdfd5cfbff589dc489443652404
       ),
       drawer: Drawer(
         child: ListView(

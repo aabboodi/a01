@@ -124,6 +124,57 @@ class _ManageClassesScreenState extends State<ManageClassesScreen> {
       },
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Manage Classes')),
+      body: FutureBuilder<List<dynamic>>(
+        future: _classesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final classes = snapshot.data ?? [];
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('اسم الصف')),
+                DataColumn(label: Text('المدرس')),
+                DataColumn(label: Text('إجراءات')),
+              ],
+              rows: classes.map((classData) {
+                return DataRow(cells: [
+                  DataCell(Text(classData['class_name'])),
+                  DataCell(Text(classData['teacher']?['full_name'] ?? 'N/A')),
+                  DataCell(Row(
+                    children: [
+                      IconButton(
+                          icon: const Icon(Icons.person_add),
+                          onPressed: () =>
+                              _showEnrollDialog(classData['class_id'])),
+                      IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteClass(
+                              classData['class_id'], classData['class_name'])),
+                    ],
+                  )),
+                ]);
+              }).toList(),
+            ),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddClassDialog,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
 }
 
 class EnrollStudentDialog extends StatefulWidget {
@@ -257,57 +308,6 @@ class _EnrollStudentDialogState extends State<EnrollStudentDialog> {
           child: const Text('Enroll'),
         ),
       ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Manage Classes')),
-      body: FutureBuilder<List<dynamic>>(
-        future: _classesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final classes = snapshot.data ?? [];
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('اسم الصف')),
-                DataColumn(label: Text('المدرس')),
-                DataColumn(label: Text('إجراءات')),
-              ],
-              rows: classes.map((classData) {
-                return DataRow(cells: [
-                  DataCell(Text(classData['class_name'])),
-                  DataCell(Text(classData['teacher']?['full_name'] ?? 'N/A')),
-                  DataCell(Row(
-                    children: [
-                      IconButton(
-                          icon: const Icon(Icons.person_add),
-                          onPressed: () =>
-                              _showEnrollDialog(classData['class_id'])),
-                      IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteClass(
-                              classData['class_id'], classData['class_name'])),
-                    ],
-                  )),
-                ]);
-              }).toList(),
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddClassDialog,
-        child: const Icon(Icons.add),
-      ),
     );
   }
 }
